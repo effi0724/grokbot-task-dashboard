@@ -1,0 +1,68 @@
+{
+ "_example": true,
+ "_comment": "EXAMPLE DATA ONLY. Synthetic bots, tasks, and durations for documentation. Not a live board.",
+ "bot": "Coordinator",
+ "desc": "Routes work across agents",
+ "desc_zh": "在多个代理之间分派工作",
+ "tasks": {
+  "route-morning": {
+   "id": "route-morning",
+   "title": "[示例] 分发晨间摘要",
+   "task_type": "orchestration",
+   "stage": "等待 Researcher 回传要点",
+   "pct": 40,
+   "eta": "2026-10-18T04:05:41-04:00",
+   "eta_first": "2026-10-18T04:05:41-04:00",
+   "estimate_minutes": 90,
+   "estimate_source": "flag",
+   "state": "running",
+   "note": "EXAMPLE · 还在等上游摘要。",
+   "via": "",
+   "started": "2026-10-18T02:35:41-04:00",
+   "updated": "2026-10-18T03:09:41-04:00",
+   "eta_revisions": 1,
+   "resume": ""
+  }
+ },
+ "history": [
+  {
+   "id": "orch-1",
+   "title": "[示例] 整理周计划",
+   "task_type": "orchestration",
+   "stage": "",
+   "pct": 100,
+   "eta": "2026-10-15T01:03:41-04:00",
+   "eta_first": "2026-10-15T01:03:41-04:00",
+   "estimate_minutes": 60,
+   "estimate_source": "flag",
+   "state": "done",
+   "note": "EXAMPLE",
+   "via": "",
+   "started": "2026-10-15T00:03:41-04:00",
+   "updated": "2026-10-15T01:15:41-04:00",
+   "finished": "2026-10-15T01:15:41-04:00",
+   "eta_revisions": 1,
+   "actual_minutes": 72
+  },
+  {
+   "id": "orch-2",
+   "title": "[示例] 回收昨日状态",
+   "task_type": "orchestration",
+   "stage": "",
+   "pct": 100,
+   "eta": "2026-10-02T00:43:41-04:00",
+   "eta_first": "2026-10-02T00:43:41-04:00",
+   "estimate_minutes": 40,
+   "estimate_source": "flag",
+   "state": "done",
+   "note": "EXAMPLE",
+   "via": "",
+   "started": "2026-10-02T00:03:41-04:00",
+   "updated": "2026-10-02T01:15:41-04:00",
+   "finished": "2026-10-02T01:15:41-04:00",
+   "eta_revisions": 2,
+   "actual_minutes": 72
+  }
+ ],
+ "updated": "2026-10-18T03:15:41-04:00"
+}

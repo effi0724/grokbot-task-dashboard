@@ -1,0 +1,9 @@
+# Copy to site/.dev.vars for `wrangler pages dev`. Never commit .dev.vars.
+# Replace every placeholder. Do not put a raw push token in this file.
+# TOKEN_SHA256 is the hex digest from `python3 cli/st token-sha256`.
+# A local smoke test can hash the obvious text "example-push-token";
+# any deployment reachable from the internet needs its own token.
+ACCESS_TEAM_DOMAIN=YOUR_TEAM.cloudflareaccess.com
+ACCESS_AUD=YOUR_ACCESS_APPLICATION_AUD
+ACCESS_ALLOWED_EMAILS=you@example.com
+TOKEN_SHA256=paste-sha256-from-st-token-sha256

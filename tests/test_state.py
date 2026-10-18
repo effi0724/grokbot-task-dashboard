@@ -1,0 +1,187 @@
+import hashlib
+import io
+import json
+import os
+import subprocess
+import sys
+from contextlib import redirect_stderr, redirect_stdout
+from datetime import timedelta
+from types import SimpleNamespace
+
+from support import ROOT, StateCase, stlib
+
+
+def ns(**kwargs):
+    base = dict(
+        bot="Coder",
+        task_id="site-tests",
+        title="[示例] 解析工期",
+        stage=None,
+        pct=None,
+        eta=None,
+        note=None,
+        via=None,
+        resume=None,
+        no_push=True,
+        state=None,
+        task_type=None,
+        estimate=None,
+        json=False,
+        history=False,
+    )
+    base.update(kwargs)
+    return SimpleNamespace(**base)
+
+
+class StateTests(StateCase):
+    def test_create_revise_and_finish(self):
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(eta="+2h", task_type="coding", pct=10, stage="写解析"))
+        task = stlib.load("Coder")["tasks"]["site-tests"]
+        self.assertEqual(task["estimate_minutes"], 120)
+        self.assertEqual(task["estimate_source"], "eta")
+        self.assertEqual(task["eta_revisions"], 0)
+        self.assertEqual(task["task_type"], "coding")
+        self.assertEqual(task["pct"], 10)
+
+        self.advance(minutes=30)
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(eta="+3h", title=None))
+        task = stlib.load("Coder")["tasks"]["site-tests"]
+        self.assertEqual(task["eta_revisions"], 1)
+        self.assertEqual(task["estimate_minutes"], 120)
+
+        same = task["eta"]
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(eta=same, title=None))
+        self.assertEqual(stlib.load("Coder")["tasks"]["site-tests"]["eta_revisions"], 1)
+
+        self.frozen = self.start + timedelta(minutes=150)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            stlib.cmd_set(ns(title=None), finishing=True)
+        done = stlib.load("Coder")["history"][0]
+        self.assertEqual(done["state"], "done")
+        self.assertEqual(done["pct"], 100)
+        self.assertEqual(done["actual_minutes"], 150)
+        self.assertNotIn("site-tests", stlib.load("Coder")["tasks"])
+        self.assertIn("1.25×", buf.getvalue())
+
+        suggestion = None
+        with redirect_stdout(io.StringIO()):
+            suggestion = stlib.cmd_estimate(ns(estimate="2h", task_type="coding"))
+        self.assertEqual(suggestion["basis"], "bot+type")
+        self.assertEqual(suggestion["n"], 1)
+        self.assertTrue(suggestion["low_confidence"])
+
+    def test_explicit_estimate_is_frozen(self):
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(estimate="90m", eta="+2h", task_type="research"))
+        task = stlib.load("Coder")["tasks"]["site-tests"]
+        self.assertEqual(task["estimate_minutes"], 90)
+        self.assertEqual(task["estimate_source"], "flag")
+        self.advance(hours=1)
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(estimate="8h", eta="+4h", title=None))
+        task = stlib.load("Coder")["tasks"]["site-tests"]
+        self.assertEqual(task["estimate_minutes"], 90)
+        self.assertEqual(task["eta_revisions"], 1)
+
+    def test_new_task_requires_title_and_rm_skips_history(self):
+        with self.assertRaises(stlib.CliError):
+            stlib.cmd_set(ns(title=None))
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(eta="+1h"))
+            stlib.cmd_rm(ns())
+        data = stlib.load("Coder")
+        self.assertEqual(data["tasks"], {})
+        self.assertEqual(data["history"], [])
+
+    def test_cancelled_is_stored_but_not_a_sample(self):
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(estimate="1h", task_type="coding"))
+        self.advance(minutes=20)
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(title=None, state="cancelled"), finishing=True)
+        history = stlib.load("Coder")["history"]
+        self.assertEqual(history[0]["state"], "cancelled")
+        self.assertEqual(stlib.snapshot()["accuracy"]["sample_count"], 0)
+
+    def test_display_window_is_shorter_than_stats_window(self):
+        old = (self.start - timedelta(days=20)).isoformat()
+        recent = (self.start - timedelta(days=2)).isoformat()
+        data = stlib.load("Coder")
+        data["history"] = [
+            {
+                "id": "old", "title": "[示例] 旧任务", "state": "done", "finished": old,
+                "started": old, "estimate_minutes": 100, "actual_minutes": 200,
+                "eta_revisions": 1, "task_type": "coding",
+            },
+            {
+                "id": "new", "title": "[示例] 新任务", "state": "done", "finished": recent,
+                "started": recent, "estimate_minutes": 100, "actual_minutes": 100,
+                "eta_revisions": 0, "task_type": "coding",
+            },
+        ]
+        stlib.save(data)
+        snap = stlib.snapshot()
+        coder = next(bot for bot in snap["bots"] if bot["bot"] == "Coder")
+        self.assertEqual([item["id"] for item in coder["history"]], ["new"])
+        self.assertEqual(snap["accuracy"]["sample_count"], 2)
+
+        os.environ["ST_STATS_DAYS"] = "10"
+        stlib.save(stlib.load("Coder"))
+        snap = stlib.snapshot()
+        self.assertEqual(snap["accuracy"]["sample_count"], 1)
+
+    def test_snapshot_attaches_calibration_to_active_tasks(self):
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(estimate="2h", eta="+2h", task_type="coding", pct=5))
+        snap = stlib.snapshot()
+        coder = next(bot for bot in snap["bots"] if bot["bot"] == "Coder")
+        cal = coder["tasks"][0]["calibration"]
+        self.assertEqual(cal["raw_minutes"], 120)
+        self.assertEqual(cal["basis"], "none")
+        self.assertEqual(cal["low_minutes"], 60)
+        self.assertEqual(cal["high_minutes"], 240)
+        self.assertIn("desc_zh", coder)
+
+    def test_bot_filename_is_sanitized_and_lock_creates_a_file(self):
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(bot="Coder/Ops", task_id="t-1", eta="+1h"))
+        self.assertTrue(os.path.exists(os.path.join(stlib.bots_dir(), "Coder_Ops.json")))
+        with stlib.Locked():
+            self.assertTrue(os.path.exists(stlib.lock_path()))
+
+    def test_push_without_url_is_local_only(self):
+        with redirect_stderr(io.StringIO()):
+            self.assertFalse(stlib.push(quiet=True))
+
+    def test_token_sha256_prints_hash_only(self):
+        os.makedirs(stlib.root_dir(), exist_ok=True)
+        with open(stlib.token_path(), "w", encoding="utf-8") as handle:
+            handle.write("example-push-token\n")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = stlib.main(["token-sha256"])
+        self.assertEqual(code, 0)
+        self.assertEqual(buf.getvalue().strip(), hashlib.sha256(b"example-push-token").hexdigest())
+        self.assertNotIn("example-push-token", buf.getvalue())
+
+    def test_cli_estimate_json(self):
+        env = os.environ.copy()
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "cli" / "st"), "estimate", "--bot", "Coder", "--estimate", "2h", "--json"],
+            capture_output=True, text=True, env=env, check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["minutes"], 120)
+        self.assertEqual(payload["basis"], "none")
+        self.assertNotIn("example-push-token", proc.stdout + proc.stderr)
+
+    def test_help_exits_cleanly(self):
+        with redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as caught:
+                stlib.main(["--help"])
+        self.assertEqual(caught.exception.code, 0)

@@ -1,0 +1,20 @@
+# GrokBot Task Dashboard — Cloudflare Pages + D1.
+# Replace every YOUR_* placeholder before you deploy. Do not put a raw push
+# token in this file. Store only TOKEN_SHA256 as a Pages secret:
+#   npx wrangler pages secret put TOKEN_SHA256 --project-name YOUR_PAGES_PROJECT
+name = "grokbot-task-dashboard"
+compatibility_date = "2026-01-01"
+pages_build_output_dir = "public"
+
+# Uncomment after `npx wrangler d1 create YOUR_D1_DATABASE_NAME`.
+# The binding name must stay `DB` — the Pages Functions read env.DB.
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "YOUR_D1_DATABASE_NAME"
+# database_id = "YOUR_D1_DATABASE_ID"
+
+# Uncomment and replace, or set the same names in the Pages dashboard.
+# [vars]
+# ACCESS_TEAM_DOMAIN = "YOUR_TEAM.cloudflareaccess.com"
+# ACCESS_AUD = "YOUR_ACCESS_APPLICATION_AUD"
+# ACCESS_ALLOWED_EMAILS = "you@example.com"

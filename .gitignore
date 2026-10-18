@@ -1,9 +1,28 @@
+# Secrets and local dashboard state. Never commit these.
 .token
+**/.token
 *.token
 .env
+.env.*
+!.env.example
 *.env
+.dev.vars
+**/.dev.vars
+!.dev.vars.example
+!**/.dev.vars.example
+
 .wrangler/
+**/.wrangler/
 node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+
+# `st` state if ST_ROOT points inside the repo
 bots/
 .push_pending
 .lock
+.grokbot-task-dashboard/
+
+playwright-report/
+test-results/

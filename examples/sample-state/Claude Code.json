@@ -1,0 +1,17 @@
+{
+ "_example": true,
+ "_comment": "EXAMPLE DATA ONLY. Synthetic bots, tasks, and durations for documentation. Not a live board.",
+ "bot": "Claude Code",
+ "tasks": {},
+ "history": [],
+ "updated": "2026-10-18T03:15:41-04:00",
+ "claude": {
+  "state": "quota",
+  "reset": "2026-10-18T07:15:41-04:00",
+  "resume": "2026-10-18T07:45:41-04:00",
+  "model": "example-model",
+  "plan": "example",
+  "note": "[示例] 额度窗口已用完，恢复后再继续排队任务。",
+  "updated": "2026-10-18T03:06:41-04:00"
+ }
+}

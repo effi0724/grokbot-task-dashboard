@@ -1,0 +1,9 @@
+.token
+*.token
+.env
+*.env
+.wrangler/
+node_modules/
+bots/
+.push_pending
+.lock

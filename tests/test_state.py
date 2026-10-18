@@ -185,3 +185,51 @@ class StateTests(StateCase):
             with self.assertRaises(SystemExit) as caught:
                 stlib.main(["--help"])
         self.assertEqual(caught.exception.code, 0)
+
+
+class AuditRegressionTests(StateCase):
+    def test_waiting_then_running_keeps_started(self):
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(estimate="60m"))
+            started = stlib.load("Coder")["tasks"]["site-tests"]["started"]
+            self.advance(minutes=30)
+            stlib.cmd_set(ns(state="waiting"))
+            self.advance(minutes=60)
+            stlib.cmd_set(ns(state="running"))
+            self.assertEqual(stlib.load("Coder")["tasks"]["site-tests"]["started"], started)
+            self.advance(minutes=40)
+            stlib.cmd_set(ns(), finishing=True)
+        done = stlib.load("Coder")["history"][-1]
+        self.assertEqual(done["actual_minutes"], 130)
+
+    def test_queued_first_run_resets_started_once(self):
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns(state="queued"))
+            self.advance(minutes=20)
+            stlib.cmd_set(ns(state="running"))
+            first = stlib.load("Coder")["tasks"]["site-tests"]["started"]
+            self.advance(minutes=10)
+            stlib.cmd_set(ns(state="queued"))
+            self.advance(minutes=10)
+            stlib.cmd_set(ns(state="running"))
+        self.assertEqual(stlib.load("Coder")["tasks"]["site-tests"]["started"], first)
+
+    def test_done_with_unknown_id_errors_and_writes_nothing(self):
+        with self.assertRaises(stlib.CliError):
+            stlib.cmd_set(ns(task_id="typo-id", title=None), finishing=True)
+        self.assertEqual(stlib.load("Coder")["history"], [])
+
+    def test_empty_st_root_falls_back_to_default(self):
+        old = os.environ.get("ST_ROOT")
+        os.environ["ST_ROOT"] = "  "
+        try:
+            self.assertEqual(stlib.root_dir(), os.path.expanduser("~/.grokbot-task-dashboard"))
+        finally:
+            if old is None:
+                os.environ.pop("ST_ROOT", None)
+            else:
+                os.environ["ST_ROOT"] = old
+
+    def test_wrangler_toml_has_no_build_output_dir(self):
+        text = (ROOT / "site" / "wrangler.toml").read_text(encoding="utf-8")
+        self.assertNotIn("\npages_build_output_dir", "\n" + text)

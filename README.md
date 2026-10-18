@@ -13,7 +13,7 @@ The cards above are **example data** (Coordinator, Researcher, Coder, Ops, Write
 Each task has a stable id, title, type, state, percent, stage, note, and an ETA. When it finishes, `st` keeps:
 
 - the **original** duration (`--estimate`, or the first ETA minus the start)
-- the **actual** duration (finish minus start)
+- the **actual** duration (finish minus first start). It is wall-clock time, so time spent `waiting` or blocked on quota counts too; moving back from `waiting` to `running` does not restart the clock
 - how many times the ETA was revised
 
 Cancelled tasks stay in the recent list and are left out of the ratios. The on-screen "recently finished" list defaults to 7 days (`ST_HISTORY_DAYS`). Calibration uses a longer window, 90 days by default (`ST_STATS_DAYS`).
@@ -102,9 +102,11 @@ make test
 python3 scripts/build_example_state.py   # refresh the labeled example snapshot
 ```
 
-Python tests cover time parsing, state transitions, and the calibration math (`unittest`, no extra packages). JavaScript tests cover push-token hashing and the calibration lines the page renders (`node:test`). GitHub Actions runs both.
+Python tests cover time parsing, state transitions, and the calibration math (`unittest`, no extra packages). JavaScript tests cover push-token hashing and the calibration lines the page renders (`node:test`). GitHub Actions runs both on Python 3.11–3.13. `st` needs macOS or Linux (it uses `fcntl`); on Windows use WSL.
 
-Screenshots are produced from the example snapshot:
+The privacy test and `scripts/scan-history.sh` read the terms to look for from an uncommitted `.privacy-terms` file (one per line, gitignored; see `.privacy-terms.example`) or from `PRIVACY_TERMS` (comma-separated). Without either, the test is skipped and the script exits 2, so the list of what to hide never ships in the repo.
+
+Screenshots are produced from the example snapshot. If Playwright is installed somewhere other than `node_modules`, point `PLAYWRIGHT_MODULE` at its entry file (for example `PLAYWRIGHT_MODULE=/path/to/node_modules/playwright/index.mjs`).
 
 ```bash
 npm install playwright && npx playwright install chromium

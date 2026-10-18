@@ -26,3 +26,6 @@ bots/
 
 playwright-report/
 test-results/
+
+# Personal privacy scan terms (see .privacy-terms.example)
+.privacy-terms

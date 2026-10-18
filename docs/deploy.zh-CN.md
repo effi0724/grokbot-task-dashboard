@@ -9,6 +9,8 @@
 
 ## 0. 准备
 
+> `st` 支持 macOS 和 Linux。它用 `fcntl` 文件锁，不支持原生 Windows，Windows 上请用 WSL。
+
 - 一个能创建 Pages、D1 和 Zero Trust Access 的 Cloudflare 账号。
 - Node.js 20+（跑 Wrangler）和 Python 3.11+（跑 `st`）。
 - 安装并登录 Wrangler：`npm install -g wrangler`，然后 `wrangler login`。
@@ -39,7 +41,7 @@ npx wrangler pages project create YOUR_PAGES_PROJECT --production-branch main
 - 变量名必须是 `DB`。函数只认 `env.DB`。
 - 数据库选第 1 步创建的那个。
 
-本地开发可以取消 `site/wrangler.toml` 里对应段落的注释，并填上 `database_name` 和 `database_id`。如果这个 id 能对应到你的账号，就不要把取消注释后的文件提交上去。生产环境可以把绑定只留在控制台。
+绑定留在控制台里就好。`site/wrangler.toml` 故意不写 `pages_build_output_dir`：一旦写了，Wrangler 会把这个文件当成配置来源，部署时会覆盖控制台里配好的 D1 绑定和变量，站点随之返回 500 或 403。文件里注释掉的段落只作参考。本地开发用命令行传绑定（`--d1 DB=...`，见第 8 步）。
 
 ## 4. Cloudflare Access
 
@@ -121,6 +123,8 @@ export ST_PUSH_URL="https://YOUR_PROJECT.pages.dev/api/push"
 export ST_TZ="America/New_York"      # 可选，默认就是这个时区
 export ST_STATS_DAYS="90"            # 可选，校准用的历史窗口
 export ST_HISTORY_DAYS="7"           # 可选，看板上「最近完成」的窗口
+export ST_STATS_MAX="500"            # 可选，参与校准的已完成任务上限
+export ST_CALIBRATE_MIN="3"          # 可选，样本数达到多少才给出校准后的 ETA
 export ST_LANG="zh"                  # 或 en
 chmod +x cli/st
 export PATH="$PWD/cli:$PATH"
@@ -147,7 +151,7 @@ python3 -m http.server 8765
 
 打开 `http://127.0.0.1:8765/?example=1`。横幅会标明这些数字是编出来的。这条路径不会启动 Functions，也不会经过 Access。
 
-要在本地把 Functions 跑起来（`wrangler pages dev` 不强制 Access，不要把端口暴露到公网）：
+在本地把 Functions 跑起来。`wrangler pages dev` 下 Access 中间件照样生效，浏览器直接打开会因为没有 Access JWT 而得到 `403 Forbidden`。这种方式适合用 `curl` 带 Bearer 令牌测试 `/api/push`；想看页面请用上面的示例路径。不要把端口暴露到公网：
 
 ```bash
 cd site

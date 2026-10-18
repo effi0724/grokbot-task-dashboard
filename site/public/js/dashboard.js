@@ -66,9 +66,9 @@ function taskCard(task, strings, lang, timeZone, nowMs) {
   return `<div class="task">
     <div class="tt"><div class="title">${escapeHtml(task.title)}${kind}${via}</div>${badge(state, strings)}</div>
     ${task.stage ? `<div class="stage">${escapeHtml(task.stage)}</div>` : ""}
-    ${showBar ? `<div class="bar"><i style="width:${Math.max(2, Math.min(100, task.pct || 0))}%;background:${color}"></i></div>` : ""}
+    ${showBar ? `<div class="bar"><i style="width:${Math.max(2, Math.min(100, Number(task.pct) || 0))}%;background:${color}"></i></div>` : ""}
     <div class="meta">
-      ${showBar ? `<span>${task.pct || 0}%</span>` : ""}
+      ${showBar ? `<span>${Number(task.pct) || 0}%</span>` : ""}
       ${eta ? `<span>${eta}</span>` : ""}
       ${task.resume ? `<span>${strings.resume}${lang === "en" ? ": " : "："}${formatWhen(task.resume, lang, timeZone)}</span>` : ""}
       <span class="${stale ? "stale" : ""}">${strings.updatedAt} ${formatAgo(task.updated, lang, nowMs)}${stale ? ` · ${strings.stale}` : ""}</span>
@@ -83,13 +83,13 @@ function statRows(rows, labelFor) {
     const hot = ratioClass(row.median_ratio);
     return `<tr>
       <td>${escapeHtml(labelFor(row))}</td>
-      <td>${row.n}</td>
+      <td>${Number(row.n) || 0}</td>
       <td class="${hot}">${formatRatio(row.median_ratio)}</td>
       <td>${formatRatio(row.p25_ratio)}</td>
       <td>${formatRatio(row.p75_ratio)}</td>
       <td>${formatSpread(row.spread)}</td>
       <td>${formatPercent(row.overrun_rate)}</td>
-      <td>${row.median_revisions ?? "—"}</td>
+      <td>${row.median_revisions == null ? "—" : Number(row.median_revisions)}</td>
     </tr>`;
   }).join("");
 }
@@ -99,7 +99,7 @@ function statTable(title, rows, labelFor, strings) {
   const head = ["colScope", "colN", "colMedian", "colP25", "colP75", "colSpread", "colOverrun", "colRevisions"]
     .map((key) => `<th>${strings[key]}</th>`).join("");
   return `<div class="card"><h4>${escapeHtml(title)}</h4>
-    <table><thead><tr>${head}</tr></thead><tbody>${statRows(rows, labelFor)}</tbody></table></div>`;
+    <div class="tbl-wrap"><table><thead><tr>${head}</tr></thead><tbody>${statRows(rows, labelFor)}</tbody></table></div></div>`;
 }
 
 function accuracyBlock(state, strings) {
@@ -174,15 +174,17 @@ function historyBlock(state, strings, lang, timeZone) {
       <td class="${ratioClass(ratio)}">${formatRatio(ratio)}</td>
     </tr>`;
   }).join("");
-  return `<table><thead><tr>
+  return `<div class="tbl-wrap"><table><thead><tr>
       <th>${strings.colFinished}</th><th>${strings.colBot}</th><th>${strings.colTask}</th>
       <th>${strings.colType}</th><th>${strings.colDuration}</th><th>${strings.colRatio}</th>
-    </tr></thead><tbody>${body}</tbody></table>`;
+    </tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 export function render(state, lang, options = {}) {
   const strings = STRINGS[lang] || STRINGS.zh;
-  const nowMs = options.nowMs || Date.now();
+  // Example snapshots use a fixed clock; render them relative to that clock.
+  const exampleNow = state && state._example && state.generated_at ? Date.parse(state.generated_at) : NaN;
+  const nowMs = options.nowMs || (Number.isFinite(exampleNow) ? exampleNow : Date.now());
   const timeZone = state.tz || "America/New_York";
   document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
   document.title = strings.title;

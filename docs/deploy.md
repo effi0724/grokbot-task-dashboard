@@ -9,6 +9,8 @@ The site is a static page plus two Pages Functions:
 
 ## 0. What you need
 
+> `st` runs on macOS and Linux. It uses `fcntl` file locks, so native Windows is not supported; use WSL.
+
 - A Cloudflare account with permission to create Workers/Pages, D1, and Zero Trust Access.
 - Node.js 20+ (for Wrangler) and Python 3.11+ (for `st`).
 - Wrangler: `npm install -g wrangler`, then `wrangler login`.
@@ -39,7 +41,7 @@ In the Pages project: **Settings → Bindings → Add → D1 database**.
 - Variable name: `DB` (the functions read `env.DB`; another name will not work)
 - Database: the one from step 1
 
-For local dev, you can instead uncomment the block in `site/wrangler.toml` and fill in `database_name` and `database_id`. Leave that block commented in git if the id would identify your account. Production can keep the binding only in the dashboard.
+Keep the binding in the dashboard. `site/wrangler.toml` deliberately has no `pages_build_output_dir`: with that key, Wrangler treats the file as the source of truth and a deploy replaces the D1 binding and variables you set in the dashboard (the site then answers 500 or 403). Its commented blocks are reference only. For local dev, pass the binding on the command line (`--d1 DB=...`, see step 8).
 
 ## 4. Cloudflare Access
 
@@ -121,6 +123,8 @@ export ST_PUSH_URL="https://YOUR_PROJECT.pages.dev/api/push"
 export ST_TZ="America/New_York"      # optional, this is the default
 export ST_STATS_DAYS="90"            # optional, calibration window
 export ST_HISTORY_DAYS="7"           # optional, "recently finished" window
+export ST_STATS_MAX="500"            # optional, max finished tasks kept for calibration
+export ST_CALIBRATE_MIN="3"          # optional, samples needed before suggesting a calibrated ETA
 export ST_LANG="zh"                  # or en
 chmod +x cli/st
 export PATH="$PWD/cli:$PATH"
@@ -147,7 +151,7 @@ python3 -m http.server 8765
 
 Open `http://127.0.0.1:8765/?example=1`. The banner says the numbers are synthetic. This path does not boot Functions or Access.
 
-To boot Functions locally (Access is not enforced by `wrangler pages dev`; do not expose the port):
+To boot Functions locally. The Access middleware still runs under `wrangler pages dev`, so a plain browser request gets `403 Forbidden` because there is no Access JWT. Use this to test `/api/push` with `curl` and the bearer token; to look at the page, use the example path above. Do not expose the port:
 
 ```bash
 cd site

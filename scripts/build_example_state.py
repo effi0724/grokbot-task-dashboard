@@ -72,7 +72,9 @@ def active(task_id, title, task_type, state, pct, estimate, eta, started, update
 
 
 def main():
-    now = datetime.now(NY).replace(microsecond=0)
+    # Fixed clock so regenerated example data is reproducible.
+    fixed = os.environ.get("EXAMPLE_NOW", "2026-01-15T14:00:00")
+    now = datetime.fromisoformat(fixed).replace(tzinfo=NY, microsecond=0)
     bots = {
         "Coordinator": {
             "desc": "Routes work across agents",

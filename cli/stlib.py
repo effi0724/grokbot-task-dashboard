@@ -110,7 +110,7 @@ def int_env(name, default):
 
 
 def root_dir():
-    return os.environ.get("ST_ROOT", os.path.expanduser("~/.grokbot-task-dashboard"))
+    return os.environ.get("ST_ROOT", "").strip() or os.path.expanduser("~/.grokbot-task-dashboard")
 
 
 def bots_dir():
@@ -608,8 +608,12 @@ def _apply_task_fields(task, args, started_dt):
                 task["estimate_minutes"] = calibration.round_minutes(derived)
                 task["estimate_source"] = "eta"
     if args.state:
-        if task["state"] != args.state and args.state == "running" and task["state"] in ("queued", "waiting"):
+        # Only the first queued -> running move resets the clock. Returning
+        # from waiting keeps the original start so calibration stays honest.
+        if task["state"] != args.state and args.state == "running" and task["state"] == "queued" and not task.get("ran"):
             task["started"] = iso(now())
+        if args.state == "running":
+            task["ran"] = True
         task["state"] = args.state
 
 
@@ -623,8 +627,10 @@ def cmd_set(args, finishing=False):
         task = data["tasks"].get(task_id)
         stamp = iso(now())
         created = task is None
+        if task is None and finishing:
+            raise CliError(t(f"st: 没有进行中的任务 {task_id}", f"st: no open task {task_id}"))
         if task is None:
-            if not args.title and not finishing:
+            if not args.title:
                 raise CliError(t("st: 新任务需要 --title", "st: a new task needs --title"))
             task = {
                 "id": task_id,
@@ -780,7 +786,8 @@ def cmd_list(args):
                 print("   " + calibration.format_suggestion(task["calibration"], lang()))
         if args.history:
             for item in bot["history"][:10]:
-                print(f"   ✓ {fmt(item.get('finished'))} {item.get('title', '')}")
+                mark = "✗" if item.get("state") == "cancelled" else "✓"
+                print(f"   {mark} {fmt(item.get('finished'))} {item.get('title', '')}")
     info = data.get("claude") or {}
     if not args.bot or args.bot == RUNNER:
         print(t(

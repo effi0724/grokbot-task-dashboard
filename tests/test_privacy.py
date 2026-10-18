@@ -1,5 +1,6 @@
 """Fail if project files contain identifiers that must stay out of this repo."""
 
+import os
 import unittest
 from pathlib import Path
 
@@ -8,30 +9,35 @@ SKIP_DIRS = {".git", "node_modules", ".wrangler", "__pycache__", ".venv"}
 BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico", ".woff", ".woff2", ".pyc"}
 
 
-def _join(*parts):
-    return "".join(parts)
+def load_terms():
+    """Terms come from PRIVACY_TERMS (comma-separated) or an uncommitted
+    .privacy-terms file, so the list itself never ships in the repo."""
+    raw = os.environ.get("PRIVACY_TERMS", "")
+    if raw.strip():
+        items = raw.split(",")
+    else:
+        path = ROOT / ".privacy-terms"
+        items = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    terms = []
+    for item in items:
+        item = item.split("#", 1)[0].strip().lower()
+        if item:
+            terms.append(item)
+    return terms
 
 
-NEEDLES = [
-    "example-term-3",
-    "example-term-1",
-    "example-term-4",
-    "example-term-5",
-    "example-term-6",
-    "example-term-7",
-    "example-term-2",
-    "example-term-8",
-    "example-term-9",
-]
+NEEDLES = load_terms()
+SKIP_FILES = {".privacy-terms"}
 
 
 class PrivacyTests(unittest.TestCase):
+    @unittest.skipUnless(NEEDLES, "no .privacy-terms file or PRIVACY_TERMS set")
     def test_worktree_has_no_forbidden_substrings(self):
         hits = []
         for path in ROOT.rglob("*"):
             if not path.is_file():
                 continue
-            if any(part in SKIP_DIRS for part in path.parts):
+            if any(part in SKIP_DIRS for part in path.parts) or path.name in SKIP_FILES:
                 continue
             if path.suffix.lower() in BINARY_SUFFIXES or path.stat().st_size > 2_000_000:
                 continue

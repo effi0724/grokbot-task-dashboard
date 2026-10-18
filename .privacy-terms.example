@@ -1,0 +1,6 @@
+# Copy to .privacy-terms (gitignored) and list one term per line that must
+# never appear in the repo: your username, email local part, domains, ids.
+# scripts/scan-history.sh and tests/test_privacy.py read it.
+your-username
+your-email-local-part
+your-domain.example

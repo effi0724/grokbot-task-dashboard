@@ -4,7 +4,9 @@
 #   npx wrangler pages secret put TOKEN_SHA256 --project-name YOUR_PAGES_PROJECT
 name = "grokbot-task-dashboard"
 compatibility_date = "2026-01-01"
-pages_build_output_dir = "public"
+# No pages_build_output_dir on purpose: with it, this file becomes the source
+# of truth and overrides D1 bindings and variables set in the Pages dashboard.
+# site/deploy.sh passes `public` explicitly.
 
 # Uncomment after `npx wrangler d1 create YOUR_D1_DATABASE_NAME`.
 # The binding name must stay `DB` — the Pages Functions read env.DB.

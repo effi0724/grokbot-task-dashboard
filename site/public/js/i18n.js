@@ -66,7 +66,7 @@ export const STRINGS = {
     colDuration: "用时",
     colRatio: "倍率",
     footer: "时间默认按 America/New_York 显示。页面每 60 秒刷新。开始、推进、卡住、额度用尽和完成时都应更新任务，并带上 ETA。",
-    refreshFail: (message) => `刷新失败（${message}），60 秒后重试；下面显示的是上次成功拿到的数据。`,
+    refreshFail: (message) => `刷新失败（${message}），下次自动刷新（约 60 秒后）会再试；下面显示的是上次成功拿到的数据。`,
     start: "开始",
   },
   en: {
@@ -136,7 +136,7 @@ export const STRINGS = {
     colDuration: "Duration",
     colRatio: "Ratio",
     footer: "Times render in America/New_York by default. The page refreshes every 60 seconds. Update a task when it starts, moves, blocks, hits quota, or finishes — and always include an ETA.",
-    refreshFail: (message) => `Refresh failed (${message}). Retrying in 60 seconds; the cards below are the last successful payload.`,
+    refreshFail: (message) => `Refresh failed (${message}). The next auto-refresh (about 60 seconds) tries again; the cards below are the last successful payload.`,
     start: "Start",
   },
 };

@@ -1,25 +1,29 @@
 #!/usr/bin/env bash
 # Search the worktree and git history for identifiers that must not ship.
-# Patterns are concatenated so this file itself does not contain them.
 set -u
 cd "$(dirname "$0")/.."
 
-needles=(
-  "example-term-3"
-  "example-term-1"
-  "example-term-4"
-  "example-term-5"
-  "example-term-6"
-  "example-term-7"
-  "example-term-2"
-  "example-term-8"
-  "example-term-9"
-)
+# The term list is never committed. Put one term per line in .privacy-terms
+# (gitignored; lines starting with # are ignored), or set PRIVACY_TERMS to a
+# comma-separated list. See .privacy-terms.example.
+needles=()
+if [[ -n "${PRIVACY_TERMS:-}" ]]; then
+  IFS=',' read -r -a needles <<<"$PRIVACY_TERMS"
+elif [[ -f .privacy-terms ]]; then
+  while IFS= read -r line; do
+    line="${line%%#*}"; line="$(echo "$line" | xargs)"
+    [[ -n "$line" ]] && needles+=("$line")
+  done < .privacy-terms
+fi
+if [[ "${#needles[@]}" -eq 0 ]]; then
+  echo "no privacy terms configured: create .privacy-terms or set PRIVACY_TERMS" >&2
+  exit 2
+fi
 
 echo "== worktree (git grep, tracked files) =="
 worktree=0
 for needle in "${needles[@]}"; do
-  if git grep -n -i -I -e "$needle" -- . ':(exclude)scripts/scan-history.sh' ':(exclude)tests/test_privacy.py'; then
+  if git grep -n -i -I -e "$needle" -- .; then
     worktree=1
   fi
 done
@@ -56,4 +60,9 @@ fi
 
 echo
 echo "== author headers (informational) =="
-git log --all --format='%H%n%an <%ae>' | grep -i -n -e "example-term-3" || echo "no author header matches"
+headers="$(git log --all --format='%H %an <%ae> %cn <%ce>')"
+author_hit=0
+for needle in "${needles[@]}"; do
+  if printf '%s\n' "$headers" | grep -i -n -e "$needle"; then author_hit=1; fi
+done
+[[ "$author_hit" -eq 0 ]] && echo "no author/committer header matches"

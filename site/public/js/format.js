@@ -109,7 +109,7 @@ export function formatRemaining(iso, lang, nowMs = Date.now()) {
 }
 
 export function sampleRatio(task) {
-  if (!task) return null;
+  if (!task || task.state === "cancelled") return null;
   const estimate = Number(task.estimate_minutes);
   const actual = Number(task.actual_minutes);
   if (!Number.isFinite(estimate) || !Number.isFinite(actual) || estimate <= 0 || actual <= 0) return null;

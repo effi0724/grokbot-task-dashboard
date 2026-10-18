@@ -13,7 +13,7 @@
 每条任务有稳定 id、标题、类型、状态、百分比、步骤、备注和 ETA。完成时 `st` 会留下：
 
 - **原始**工期（`--estimate`，或第一次 ETA 减去开始时间）
-- **实际**工期（完成时间减去开始时间）
+- **实际**工期（完成时间减去首次开始时间）。按墙钟计算，`waiting` 和等额度的时间也算在内；从 `waiting` 改回 `running` 不会重新计时
 - ETA 被改过几次
 
 取消的任务还在「最近完成」里，但不进入倍率。看板上的最近完成默认是 7 天（`ST_HISTORY_DAYS`）。校准用更长的窗口，默认 90 天（`ST_STATS_DAYS`）。
@@ -102,9 +102,11 @@ make test
 python3 scripts/build_example_state.py   # 重新生成标明为示例的快照
 ```
 
-Python 测试覆盖时间解析、状态流转和校准数学（`unittest`，没有额外依赖）。JavaScript 测试覆盖推送令牌哈希，以及页面上的校准文案（`node:test`）。GitHub Actions 会跑这两边。
+Python 测试覆盖时间解析、状态流转和校准数学（`unittest`，没有额外依赖）。JavaScript 测试覆盖推送令牌哈希，以及页面上的校准文案（`node:test`）。GitHub Actions 会在 Python 3.11–3.13 上跑这两边。`st` 需要 macOS 或 Linux（用到 `fcntl`），Windows 上请用 WSL。
 
-截图来自示例快照：
+隐私测试和 `scripts/scan-history.sh` 要查的词从未提交的 `.privacy-terms` 文件读取（每行一个，已被 git 忽略，格式见 `.privacy-terms.example`），也可以用 `PRIVACY_TERMS`（逗号分隔）。两者都没有时测试跳过、脚本以 2 退出，所以「要隐藏什么」这份清单本身不会进仓库。
+
+截图来自示例快照。如果 Playwright 没装在本仓库的 `node_modules` 里，用 `PLAYWRIGHT_MODULE` 指向它的入口文件（例如 `PLAYWRIGHT_MODULE=/path/to/node_modules/playwright/index.mjs`）。
 
 ```bash
 npm install playwright && npx playwright install chromium

@@ -78,3 +78,8 @@ test("relative time uses the injected clock", () => {
   assert.equal(formatAgo(five, "en", now), "5 min ago");
   assert.equal(formatAgo(null, "zh", now), "");
 });
+
+test("cancelled tasks have no sample ratio", () => {
+  assert.equal(sampleRatio({ state: "cancelled", estimate_minutes: 30, actual_minutes: 60 }), null);
+  assert.equal(sampleRatio({ state: "done", estimate_minutes: 30, actual_minutes: 60 }), 2);
+});

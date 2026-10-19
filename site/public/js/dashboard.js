@@ -11,6 +11,9 @@ import {
   formatWhen,
   ratioClass,
   sampleRatio,
+  applyQuotaToTasks,
+  quotaRunners,
+  usageIsStale,
 } from "./format.js";
 
 const COLOR = {
@@ -41,7 +44,7 @@ function wrap(lang, text) {
 function badge(state, strings) {
   const cls = STATE_CLASS[state] || "s-queued";
   const label = strings.states[state] || state;
-  return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
+  return `<span class="badge ${cls}" data-f="${escapeHtml(state)}" title="${escapeHtml(strings.filterHint)}">${escapeHtml(label)}</span>`;
 }
 
 function taskCard(task, strings, lang, timeZone, nowMs) {
@@ -74,6 +77,8 @@ function taskCard(task, strings, lang, timeZone, nowMs) {
       <span class="${stale ? "stale" : ""}">${strings.updatedAt} ${formatAgo(task.updated, lang, nowMs)}${stale ? ` · ${strings.stale}` : ""}</span>
     </div>
     ${cal ? `<div class="cal">${escapeHtml(cal)}</div>` : ""}
+    ${task.auto === "paused" ? `<div class="note">${escapeHtml(strings.autoPaused(task.auto_runner))}</div>` : ""}
+    ${task.auto === "recovered" ? `<div class="note">${escapeHtml(strings.autoRecovered)}</div>` : ""}
     ${task.note ? `<div class="note">${escapeHtml(task.note)}</div>` : ""}
   </div>`;
 }
@@ -117,38 +122,66 @@ function accuracyBlock(state, strings) {
     ${statTable(strings.byBoth, accuracy.bot_types, (row) => `${row.bot} / ${row.task_type}`, strings)}`;
 }
 
-function claudeBlock(state, strings, lang, timeZone, nowMs) {
-  const info = state.claude || {};
+function pctBar(label, value, suffix) {
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  const color = pct > 50 ? "var(--ok)" : pct > 20 ? "var(--wait)" : "var(--block)";
+  return `<div class="qrow"><span>${escapeHtml(label)}</span><b>${Math.round(pct)}%${suffix ? ` ${escapeHtml(suffix)}` : ""}</b></div>
+    <div class="bar"><i style="width:${Math.max(2, pct)}%;background:${color}"></i></div>`;
+}
+
+function quotaCard(runner, strings, lang, timeZone, nowMs) {
+  const info = runner.info;
   const label = strings.claudeStates[info.state] || strings.claudeUnset;
-  const badgeClass = info.state === "quota" ? "s-quota" : info.state === "running" ? "s-running" : "s-done";
-  const cardClass = info.state === "quota" ? "alert" : "";
-  let reset = "";
-  if (info.reset) {
-    const left = formatRemaining(info.reset, lang, nowMs);
-    reset = `${formatWhen(info.reset, lang, timeZone)} ${wrap(lang, left || strings.passed)}`;
+  const badgeClass = info.state === "quota" ? "s-quota" : info.state === "running" ? "s-running" : info.state === "ok" ? "s-done" : "s-queued";
+  const when = (iso) => {
+    const left = formatRemaining(iso, lang, nowMs);
+    return `${formatWhen(iso, lang, timeZone)} ${wrap(lang, left || strings.passed)}`;
+  };
+  let bars = "";
+  if (runner.session && info.session_left != null) {
+    const suffix = info.session_auto ? wrap(lang, strings.refilled) : info.session_forced ? wrap(lang, strings.hitLimit) : "";
+    bars += pctBar(strings.sessionLeft, info.session_left, suffix);
+    if (info.reset && !info.session_auto) bars += `<div class="note">${escapeHtml(strings.refresh)}${lang === "en" ? ": " : "："}${escapeHtml(when(info.reset))}</div>`;
   }
+  bars += info.week_left == null
+    ? `<div class="note">${escapeHtml(strings.weekUnknown)}</div>`
+    : pctBar(strings.weekLeft, info.week_left, info.week_auto ? wrap(lang, strings.refilled) : "");
+  const read = info.usage_read || (runner.session ? "" : info.updated);
+  const stale = usageIsStale(read, nowMs);
   const kv = [
-    info.model ? [strings.model, info.model] : null,
-    reset ? [strings.reset, reset] : null,
+    !runner.session && info.reset ? [strings.reset, when(info.reset)] : null,
+    info.weekly_reset ? [strings.weeklyReset, when(info.weekly_reset)] : null,
+    info.state === "quota" && info.until ? [strings.quotaBack, when(info.until)] : null,
     info.resume ? [strings.resumeRun, formatWhen(info.resume, lang, timeZone)] : null,
+    info.used ? [strings.used, info.limit ? `${info.used} / ${info.limit}` : info.used] : null,
+    info.model ? [strings.model, info.model] : null,
     info.plan ? [strings.plan, info.plan] : null,
+    info.tool ? [strings.tool, info.tool] : null,
     [strings.updatedLabel, formatAgo(info.updated, lang, nowMs) || "—"],
   ].filter(Boolean);
+  const readRow = `<span>${escapeHtml(strings.usageRead)}</span><span class="${stale ? "stale" : ""}">${read ? escapeHtml(formatAgo(read, lang, nowMs) + (stale ? ` · ${strings.maybeStale}` : "")) : escapeHtml(strings.notRead)}</span>`;
+  const note = info.recovered ? strings.recoveredNote : info.note;
+  return `<div class="card ${info.state === "quota" ? "alert" : ""}"><div class="ch"><h2>${escapeHtml(strings.quotaOf(runner.name))}</h2><span class="badge ${badgeClass}">${escapeHtml(label)}</span></div>
+      ${bars}
+      <div class="kv">${kv.map(([key, value]) => `<span>${escapeHtml(key)}</span><span>${escapeHtml(value)}</span>`).join("")}${readRow}</div>
+      ${note ? `<div class="note">${escapeHtml(note)}</div>` : ""}</div>`;
+}
+
+function claudeBlock(state, strings, lang, timeZone, nowMs) {
+  const runners = quotaRunners(state, nowMs);
   const handed = [];
   (state.bots || []).forEach((bot) => {
     (bot.tasks || []).forEach((task) => {
-      if (/claude/i.test(task.via || "")) handed.push([bot.bot, task]);
+      if (runners.some((runner) => runner.match.test(task.via || ""))) handed.push([bot.bot, task]);
     });
   });
   (state.claude_tasks || []).forEach((task) => handed.push(["Claude Code", task]));
   const handedHtml = handed.length
-    ? handed.map(([bot, task]) => `<div class="task"><div class="tt"><div class="title">${escapeHtml(task.title)}<span class="via">${escapeHtml(bot)}</span></div>${badge(task.state, strings)}</div>
+    ? handed.map(([bot, task]) => `<div class="task"><div class="tt"><div class="title">${escapeHtml(task.title)}<span class="via">${escapeHtml(bot)}${task.via ? ` ⇢ ${escapeHtml(task.via)}` : ""}</span></div>${badge(task.state, strings)}</div>
         <div class="meta">${task.eta ? `<span>${strings.eta} ${formatWhen(task.eta, lang, timeZone)}</span>` : ""}${task.resume ? `<span>${strings.start}${lang === "en" ? ": " : "："}${formatWhen(task.resume, lang, timeZone)}</span>` : ""}</div></div>`).join("")
     : `<div class="empty">${strings.claudeEmpty}</div>`;
-  return `<div class="card ${cardClass}"><div class="ch"><h2>${strings.quotaTitle}</h2><span class="badge ${badgeClass}">${escapeHtml(label)}</span></div>
-      <div class="kv">${kv.map(([key, value]) => `<span>${escapeHtml(key)}</span><span>${escapeHtml(value)}</span>`).join("")}</div>
-      ${info.note ? `<div class="note">${escapeHtml(info.note)}</div>` : ""}</div>
-    <div class="card"><div class="ch"><h2>${strings.claudeTasks}</h2></div>${handedHtml}</div>`;
+  return runners.map((runner) => quotaCard(runner, strings, lang, timeZone, nowMs)).join("")
+    + `<div class="card"><div class="ch"><h2>${strings.claudeTasks}</h2></div>${handedHtml}</div>`;
 }
 
 function historyBlock(state, strings, lang, timeZone) {
@@ -180,11 +213,13 @@ function historyBlock(state, strings, lang, timeZone) {
     </tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
-export function render(state, lang, options = {}) {
+export function render(rawState, lang, options = {}) {
   const strings = STRINGS[lang] || STRINGS.zh;
+  const filter = options.filter || "";
   // Example snapshots use a fixed clock; render them relative to that clock.
-  const exampleNow = state && state._example && state.generated_at ? Date.parse(state.generated_at) : NaN;
-  const nowMs = options.nowMs || (Number.isFinite(exampleNow) ? exampleNow : Date.now());
+  const exampleClock = rawState && rawState._example && rawState.generated_at ? Date.parse(rawState.generated_at) : NaN;
+  const nowMs = options.nowMs || (Number.isFinite(exampleClock) ? exampleClock : Date.now());
+  const state = applyQuotaToTasks(rawState, nowMs);
   const timeZone = state.tz || "America/New_York";
   document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
   document.title = strings.title;
@@ -208,11 +243,15 @@ export function render(state, lang, options = {}) {
   let idle = 0;
   const bots = document.getElementById("bots");
   if (bots) {
-    bots.innerHTML = (state.bots || []).map((bot) => {
-      const tasks = bot.tasks || [];
-      tasks.forEach((task) => { counts[task.state] = (counts[task.state] || 0) + 1; });
+    bots.innerHTML = (state.bots || []).filter((bot) => {
+      const all = bot.tasks || [];
+      all.forEach((task) => { counts[task.state] = (counts[task.state] || 0) + 1; });
+      if (!all.length) idle += 1;
+      if (!filter) return true;
+      return filter === "idle" ? !all.length : all.some((task) => task.state === filter);
+    }).map((bot) => {
+      const tasks = (bot.tasks || []).filter((task) => !filter || filter === "idle" || task.state === filter);
       const active = tasks.filter((task) => task.state !== "routine");
-      if (!tasks.length) idle += 1;
       const cls = tasks.some((task) => task.state === "blocked")
         ? "bad"
         : tasks.some((task) => task.state === "quota")
@@ -227,13 +266,15 @@ export function render(state, lang, options = {}) {
         ${desc ? `<p class="desc">${escapeHtml(desc)}</p>` : ""}
         ${tasks.length ? tasks.map((task) => taskCard(task, strings, lang, timeZone, nowMs)).join("") : `<div class="empty">${empty}</div>`}
       </div>`;
-    }).join("");
+    }).join("") || (filter ? `<div class="empty">${strings.filterEmpty}</div>` : "");
   }
   const sum = document.getElementById("sum");
   if (sum) {
-    sum.innerHTML = ORDER.filter((key) => counts[key]).map((key) =>
-      `<span class="chip" style="border-color:${COLOR[key]}">${strings.states[key]} <b>${counts[key]}</b></span>`,
-    ).join("") + `<span class="chip">${strings.idleBots} <b>${idle}</b></span>`;
+    const on = (key) => (filter === key ? " on" : "");
+    sum.innerHTML = `<span class="chip${on("")}" data-f="">${strings.all}</span>`
+      + ORDER.filter((key) => counts[key] || filter === key).map((key) =>
+        `<span class="chip${on(key)}" data-f="${key}" style="border-color:${COLOR[key]}">${strings.states[key]} <b>${counts[key] || 0}</b></span>`,
+      ).join("") + `<span class="chip${on("idle")}" data-f="idle">${strings.idleBots} <b>${idle}</b></span>`;
   }
   const accuracyTitle = document.getElementById("accuracy-title");
   const accuracyNote = document.getElementById("accuracy-note");
@@ -260,11 +301,19 @@ export function boot() {
   const example = params.get("example") === "1";
   let lang = initialLang();
   let last = null;
+  let filter = decodeURIComponent((location.hash.match(/f=([^&]*)/) || [])[1] || "");
   const button = document.getElementById("lang");
   const paint = () => {
     if (button) button.textContent = lang === "en" ? "中文" : "EN";
-    if (last) render(last, lang, { example });
+    if (last) render(last, lang, { example, filter });
   };
+  document.addEventListener("click", (event) => {
+    const el = event.target.closest("[data-f]");
+    if (!el) return;
+    filter = filter === el.dataset.f ? "" : el.dataset.f;
+    history.replaceState(null, "", filter ? `#f=${encodeURIComponent(filter)}` : location.pathname + location.search);
+    paint();
+  });
   if (button) {
     button.addEventListener("click", () => {
       lang = lang === "en" ? "zh" : "en";
@@ -298,7 +347,7 @@ export function boot() {
   if (gen && !last) gen.textContent = (STRINGS[lang] || STRINGS.zh).loading;
   load();
   setInterval(load, 60000);
-  setInterval(() => last && render(last, lang, { example }), 20000);
+  setInterval(() => last && render(last, lang, { example, filter }), 20000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) load();
   });

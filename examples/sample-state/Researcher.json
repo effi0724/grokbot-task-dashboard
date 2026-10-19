@@ -22,6 +22,24 @@
    "updated": "2026-01-15T13:52:00-05:00",
    "eta_revisions": 0,
    "resume": ""
+  },
+  "long-read": {
+   "id": "long-read",
+   "title": "[示例] 交给订阅执行者的长文摘要",
+   "task_type": "research",
+   "stage": "第 2 部分",
+   "pct": 55,
+   "eta": "2026-01-15T14:30:00-05:00",
+   "eta_first": "2026-01-15T14:30:00-05:00",
+   "estimate_minutes": 60,
+   "estimate_source": "flag",
+   "state": "running",
+   "note": "EXAMPLE · 交给另一个订阅执行者，看板跟随它的额度。",
+   "via": "Gemini",
+   "started": "2026-01-15T13:25:00-05:00",
+   "updated": "2026-01-15T13:55:00-05:00",
+   "eta_revisions": 0,
+   "resume": ""
   }
  },
  "history": [

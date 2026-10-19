@@ -115,3 +115,85 @@ export function sampleRatio(task) {
   if (!Number.isFinite(estimate) || !Number.isFinite(actual) || estimate <= 0 || actual <= 0) return null;
   return actual / estimate;
 }
+
+const QUOTA_OUT = 0.5;
+const isPast = (iso, nowMs) => Boolean(iso) && new Date(iso).getTime() <= nowMs;
+
+// Normalize a quota card for display. A passed reset refills its bar; a bar
+// at ~0 before its reset means quota; a quota whose reset has passed (and no
+// empty bar) shows as available again. `hasSession` enables the 5-hour bar.
+export function normalizeQuota(raw, hasSession, nowMs = Date.now()) {
+  const info = { ...(raw || {}) };
+  if (info.weekly_reset && isPast(info.weekly_reset, nowMs) && info.week_left != null) {
+    info.week_left = 100;
+    info.week_auto = true;
+  }
+  if (hasSession && info.session_left != null && info.reset && isPast(info.reset, nowMs)) {
+    info.session_left = 100;
+    info.session_auto = true;
+  }
+  const weekOut = info.week_left != null && Number(info.week_left) <= QUOTA_OUT;
+  const sessionOut = hasSession && info.session_left != null && Number(info.session_left) <= QUOTA_OUT;
+  if (info.state === "quota") {
+    if (weekOut) info.until = info.weekly_reset;
+    else if (sessionOut) info.until = info.reset;
+    else if (info.reset && !isPast(info.reset, nowMs)) {
+      info.until = info.reset;
+      if (hasSession) { info.session_left = 0; info.session_forced = true; }
+    } else {
+      info.state = "ok";
+      info.recovered = true;
+    }
+  } else if (weekOut || sessionOut) {
+    info.state = "quota";
+    info.until = weekOut ? info.weekly_reset : info.reset;
+  }
+  return info;
+}
+
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Runners whose quota cards drive task state: Claude Code plus every name in
+// state.quotas. A task follows the runner its `via` mentions.
+export function quotaRunners(state, nowMs = Date.now()) {
+  const runners = [{ name: "Claude Code", match: /claude/i, info: normalizeQuota(state.claude, true, nowMs), session: true }];
+  Object.entries(state.quotas || {}).forEach(([name, raw]) => {
+    runners.push({ name, match: new RegExp(escapeRegExp(name), "i"), info: normalizeQuota(raw, false, nowMs), session: false });
+  });
+  return runners;
+}
+
+// Return a copy of the snapshot where handed-off tasks follow their runner:
+// running work on an exhausted runner shows quota; quota work on a recovered
+// runner shows queued. The bot still records the real state with `st set`.
+export function applyQuotaToTasks(state, nowMs = Date.now()) {
+  const copy = JSON.parse(JSON.stringify(state || {}));
+  const runners = quotaRunners(copy, nowMs);
+  const fix = (task) => {
+    const runner = runners.find((item) => item.match.test(task.via || ""));
+    if (!runner) return;
+    const info = runner.info;
+    if (task.state === "quota" && info.state !== "quota") {
+      task.state = "queued";
+      task.auto = "recovered";
+    } else if (task.state === "running" && info.state === "quota") {
+      task.state = "quota";
+      task.auto = "paused";
+      task.auto_runner = runner.name;
+      const resume = info.resume && !isPast(info.resume, nowMs) ? info.resume : info.until;
+      if (resume && !task.resume) task.resume = resume;
+    }
+  };
+  (copy.bots || []).forEach((bot) => (bot.tasks || []).forEach(fix));
+  (copy.claude_tasks || []).forEach((task) => {
+    if (!task.via) task.via = "Claude Code";
+    fix(task);
+  });
+  return copy;
+}
+
+export function usageIsStale(iso, nowMs = Date.now(), hours = 3) {
+  return Boolean(iso) && nowMs - new Date(iso).getTime() > hours * 3600e3;
+}

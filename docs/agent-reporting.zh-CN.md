@@ -58,4 +58,19 @@ st estimate --bot Coder --task-type coding --estimate 2h
 
 ## 执行器额度
 
-`st claude` 记的是单独的 Claude Code 卡片（状态 `ok`、`running`、`quota` 或 `unknown`）。它不能代替每条任务自己的更新。交给这个执行器的任务加上 `--via "Claude Code"`，看板会把它们归到一处。
+`st claude` 记录 Claude Code 卡片：状态（`ok`、`running`、`quota`、`unknown`），5 小时和每周两根额度条（`--session-left`、`--week-left`，0–100），以及各自的重置时间（`--reset`、`--weekly-reset`）。尽量读真实数字，不要手填：`scripts/claude-usage.sh` 会打开 `/usage` 面板（不发模型请求、不耗额度），保存文字后运行 `st claude --from-usage FILE`。以下时机运行：
+
+1. 把任务交给 Claude Code 之前；
+2. 它跑完一段工作之后；
+3. 一看到用量或限流提示就运行，不要手写 `st claude --state quota`；
+4. 重置之后、续跑之前。
+
+不要定时轮询。任一额度条接近 0 就标为 `quota`，恢复时间设为该次重置后 30 分钟；两根条都有余量的读数会退出 `quota`。只手动标 `--state quota` 而不给数字时，5 小时条会置 0，保证卡片和进度条一致。读数超过 3 小时，卡片会提示可能不准。
+
+其他订阅执行者（例如 Gemini、Kimi）用 `st quota --runner 名称`，参数有 `--state ok|running|quota|login|unknown`、`--week-left`、`--used`、`--limit`、`--reset`、`--weekly-reset`、`--resume`、`--model`、`--plan`、`--tool`、`--note`。每个执行者一张卡片。
+
+这些卡片不能代替每条任务自己的更新。任务的 `--via` 填执行者名称（`--via "Claude Code"`、`--via Gemini`）。执行者额度用完时，页面把它的进行中任务显示为 `quota`；重置时间一过，`quota` 任务显示为 `queued`。真正续跑时仍要 `st set ... --state running`。
+
+## 例行任务
+
+每个定期任务登记一次：`st set --bot 名称 --task-id 短id --title "..." --stage "每天 08:00" --state routine --eta 待估`。频率变了或删除时同步更新。只跑一次的定时任务跑完立刻 `st done`，不要一直留成例行任务。

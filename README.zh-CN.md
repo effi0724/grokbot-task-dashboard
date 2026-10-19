@@ -69,6 +69,9 @@ st stats
 st done --bot Coder --task-id parse-durations
 st rm --bot Coder --task-id parse-durations          # 登记错了，不进历史
 st claude --state quota --reset +5h --resume +5h30m --note "额度用完"
+st claude --session-left 40 --week-left 70 --weekly-reset "01-20 10:00"
+scripts/claude-usage.sh                              # 读 /usage，再 st claude --from-usage
+st quota --runner Gemini --state ok --week-left 64 --reset +3h
 st push
 st token-sha256                                      # 只打印哈希，用来填 Pages 机密
 ```
@@ -89,7 +92,9 @@ ETA 可以写成：`2026-10-18 03:30`、`03:30`（今天，若已过则是明天
 - `POST /api/push` 用 `env.TOKEN_SHA256` 核对 Bearer 令牌，把快照写进 D1（`env.DB`）。
 - `GET /api/state` 返回这份快照。页面每 60 秒拉一次。
 
-不连 Cloudflare 时，用任意静态服务器打开 `site/public/index.html` 并加上 `?example=1`，就会渲染 `example-state.json`。页头的按钮在中文和 English 之间切换。
+不连 Cloudflare 时，用任意静态服务器打开 `site/public/index.html` 并加上 `?example=1`，就会渲染 `example-state.json`。页头的按钮在中文和 English 之间切换。点状态标签或任务徽章可以筛选看板，筛选条件保存在网址里（`#f=状态`）。额度卡片显示 Claude Code 的 5 小时和每周额度条，以及每个 `st quota` 执行者各一张卡片；`--via` 写了执行者名称的任务会跟随它的额度（额度用完时进行中显示为额度用完，重置后额度用完显示为排队中）。
+
+![额度卡片](docs/screenshot-quota.png)
 
 ## 部署
 

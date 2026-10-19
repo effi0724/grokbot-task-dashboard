@@ -3,6 +3,7 @@
 Stdlib only. Paths and the push target come from the environment:
 ST_ROOT, ST_PUSH_URL, ST_TZ, ST_STATS_DAYS, ST_HISTORY_DAYS,
 ST_STATS_MAX, ST_CALIBRATE_MIN, ST_LANG, ST_BOTS.
+Quota cards: `st claude` (Claude Code) and `st quota --runner NAME`.
 """
 
 from __future__ import annotations
@@ -465,6 +466,7 @@ def snapshot():
         "history_window_days": history_days(),
         "bots": bots,
         "claude": runner.get("claude", {}),
+        "quotas": runner.get("quotas", {}),
         "claude_tasks": runner_tasks,
         "accuracy": accuracy,
     }
@@ -703,27 +705,181 @@ def cmd_rm(args):
         push()
 
 
+_MONTHS = {m: i + 1 for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+)}
+
+
+def parse_usage_reset(text, current=None):
+    """Parse 'Resets 9:59am (America/New_York)' or 'Resets Oct 19, 7:59pm (UTC)'.
+
+    Returns an aware datetime in the configured zone, or None.
+    """
+    match = re.search(
+        r"Resets\s+(?:([A-Za-z]{3})[a-z]*\s+(\d{1,2}),?\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?:\s*\(([^)]+)\))?",
+        text, re.I,
+    )
+    if not match:
+        return None
+    month, day, hour, minute, ampm, zone_name = match.groups()
+    try:
+        tz = ZoneInfo(zone_name) if zone_name else zone()
+    except Exception:
+        tz = zone()
+    hour = int(hour) % 12 + (12 if ampm.lower() == "pm" else 0)
+    base = (current or now()).astimezone(tz)
+    if month:
+        value = datetime(base.year, _MONTHS.get(month.lower()[:3], base.month), int(day),
+                         hour, int(minute or 0), tzinfo=tz)
+        if value < base - timedelta(days=180):
+            value = value.replace(year=base.year + 1)
+    else:
+        value = base.replace(hour=hour, minute=int(minute or 0), second=0, microsecond=0)
+        if value <= base - timedelta(minutes=1):
+            value += timedelta(days=1)
+    return value.astimezone(zone())
+
+
+def parse_usage_text(text, current=None):
+    """Read 'Current session' and 'Current week' blocks from a Claude Code /usage capture."""
+    out = {}
+    for key, label in (("session", r"Current session"), ("week", r"Current week[^\n]*")):
+        match = re.search(label + r"\s*\n(.*?\n.*?\n)", text + "\n\n")
+        if not match:
+            continue
+        block = match.group(1)
+        used = re.search(r"(\d{1,3}(?:\.\d+)?)%\s*used", block)
+        if used:
+            out[key + "_left"] = round(max(0.0, 100.0 - float(used.group(1))), 1)
+        reset = parse_usage_reset(block, current)
+        if reset:
+            out[key + "_reset"] = reset
+    return out
+
+
+def _clamp_pct(value):
+    return max(0.0, min(100.0, float(value)))
+
+
+def quota_consistent(info, explicit_state=None, reading=False, has_session=True):
+    """Keep state and the remaining-quota bars consistent.
+
+    Any bar at ~0 means quota. A fresh reading with room on both bars leaves
+    quota. A manual quota without a reading empties the session bar.
+    """
+    session_left, week_left = info.get("session_left"), info.get("week_left")
+    week_out = week_left is not None and week_left <= 0.5
+    session_out = session_left is not None and session_left <= 0.5
+    if week_out or session_out:
+        info["state"] = "quota"
+        info["limit_scope"] = "week" if week_out and not session_out else "session"
+        reset = info.get("weekly_reset") if week_out and not session_out else info.get("reset")
+        if reset and (reading or not info.get("resume") or info["resume"] < reset):
+            info["resume"] = iso(datetime.fromisoformat(reset) + timedelta(minutes=30))
+    elif explicit_state == "quota":
+        if has_session:
+            info["session_left"] = 0.0
+        info["limit_scope"] = "session"
+    elif info.get("state") == "quota" and reading:
+        info["state"] = "ok"
+        info.pop("limit_scope", None)
+    elif info.get("state") != "quota":
+        info.pop("limit_scope", None)
+    return info
+
+
+def _apply_quota_args(info, args):
+    if args.state:
+        info["state"] = args.state
+    for key, label in (("reset", t("重置时间", "reset time")),
+                       ("weekly_reset", t("每周重置时间", "weekly reset time")),
+                       ("resume", t("恢复时间", "resume time"))):
+        value = getattr(args, key, None)
+        if value is not None:
+            info[key] = iso(parse_time(value, label))
+    for key, size in (("model", 80), ("plan", 80), ("note", 2000), ("used", 40), ("limit", 80), ("tool", 80)):
+        value = getattr(args, key, None)
+        if value is not None:
+            info[key] = _clip(value, size)
+    reading = False
+    for key in ("session_left", "week_left"):
+        value = getattr(args, key, None)
+        if value is not None:
+            info[key] = _clamp_pct(value)
+            reading = True
+    return reading
+
+
+def _pct_text(value):
+    return "?" if value is None else str(round(value))
+
+
 def cmd_claude(args):
+    usage = None
+    if getattr(args, "from_usage", None):
+        try:
+            with open(args.from_usage, encoding="utf-8", errors="replace") as handle:
+                usage = parse_usage_text(handle.read())
+        except OSError as exc:
+            raise CliError(t(f"st: 读不到 {args.from_usage}：{exc}", f"st: cannot read {args.from_usage}: {exc}"))
+        if "session_left" not in usage and "week_left" not in usage:
+            raise CliError(t(
+                f"st: {args.from_usage} 里没有 /usage 数据，未改动看板",
+                f"st: no /usage data in {args.from_usage}; nothing changed",
+            ))
     with Locked():
         data = load(RUNNER)
         info = data.setdefault("claude", {})
-        if args.state:
-            info["state"] = args.state
-        if args.reset is not None:
-            info["reset"] = iso(parse_time(args.reset, t("重置时间", "reset time")))
-        if args.resume is not None:
-            info["resume"] = iso(parse_time(args.resume, t("恢复时间", "resume time")))
-        if args.model is not None:
-            info["model"] = _clip(args.model, 80)
-        if args.note is not None:
-            info["note"] = _clip(args.note, 2000)
-        if args.plan is not None:
-            info["plan"] = _clip(args.plan, 80)
+        reading = _apply_quota_args(info, args)
+        if usage:
+            reading = True
+            if "session_left" in usage:
+                info["session_left"] = usage["session_left"]
+            if "session_reset" in usage:
+                info["reset"] = iso(usage["session_reset"])
+            if "week_left" in usage:
+                info["week_left"] = usage["week_left"]
+            if "week_reset" in usage:
+                info["weekly_reset"] = iso(usage["week_reset"])
+        if reading:
+            info["usage_read"] = iso(now())
+        quota_consistent(info, args.state, reading)
         info["updated"] = iso(now())
         save(data)
     print(t(
-        f"st: Claude Code → {info.get('state', '')}  重置 {fmt(info.get('reset'))}",
-        f"st: Claude Code → {info.get('state', '')}  reset {fmt(info.get('reset'))}",
+        f"st: Claude Code → {info.get('state', '')}  5 小时剩 {_pct_text(info.get('session_left'))}%（刷新 {fmt(info.get('reset'))}）"
+        f"  本周剩 {_pct_text(info.get('week_left'))}%（重置 {fmt(info.get('weekly_reset'))}）",
+        f"st: Claude Code → {info.get('state', '')}  session {_pct_text(info.get('session_left'))}% left (reset {fmt(info.get('reset'))})"
+        f"  week {_pct_text(info.get('week_left'))}% left (reset {fmt(info.get('weekly_reset'))})",
+    ))
+    if not args.no_push:
+        push()
+
+
+def _clean_runner(name):
+    name = (name or "").strip()
+    if not name or len(name) > 40 or name == RUNNER or "/" in name or name.startswith("."):
+        raise CliError(t(f"st: 无效的执行者名称 {name!r}", f"st: invalid runner name {name!r}"))
+    return name
+
+
+def cmd_quota(args):
+    name = _clean_runner(args.runner)
+    with Locked():
+        data = load(RUNNER)
+        quotas = data.setdefault("quotas", {})
+        info = quotas.setdefault(name, {})
+        reading = _apply_quota_args(info, args)
+        if reading:
+            info["usage_read"] = iso(now())
+        quota_consistent(info, args.state, reading, has_session=False)
+        info["updated"] = iso(now())
+        save(data)
+    print(t(
+        f"st: {name} → {info.get('state', '')}  用量 {info.get('used', '?')}/{info.get('limit', '?')}  "
+        f"本周剩 {_pct_text(info.get('week_left'))}%  重置 {fmt(info.get('reset'))}",
+        f"st: {name} → {info.get('state', '')}  used {info.get('used', '?')}/{info.get('limit', '?')}  "
+        f"week {_pct_text(info.get('week_left'))}% left  reset {fmt(info.get('reset'))}",
     ))
     if not args.no_push:
         push()
@@ -800,6 +956,13 @@ def cmd_list(args):
                 f"   {task['id']:<22} {label:<8} {task.get('pct', 0):>3}%  "
                 f"ETA {fmt(task.get('eta')):<11} {task['title']}"
             )
+    for name, quota in sorted((data.get("quotas") or {}).items()):
+        if args.bot and args.bot != name:
+            continue
+        print(t(
+            f"■ {name}：{quota.get('state', '未登记')}  本周剩 {_pct_text(quota.get('week_left'))}%  重置 {fmt(quota.get('reset'))}  {quota.get('note', '')}",
+            f"■ {name}: {quota.get('state', 'unset')}  week {_pct_text(quota.get('week_left'))}% left  reset {fmt(quota.get('reset'))}  {quota.get('note', '')}",
+        ))
     if os.path.exists(pending_path()):
         print(t("（有未同步到看板的更新，运行 st push）", "(dashboard sync is pending; run st push)"))
     if not args.bot:
@@ -888,7 +1051,25 @@ def build_parser():
     runner.add_argument("--model")
     runner.add_argument("--plan")
     runner.add_argument("--note")
+    runner.add_argument("--weekly-reset", dest="weekly_reset", help="weekly limit reset / 每周额度重置时间")
+    runner.add_argument("--session-left", dest="session_left", type=float, help="5-hour quota left, 0-100 / 5 小时额度剩余百分比")
+    runner.add_argument("--week-left", dest="week_left", type=float, help="weekly quota left, 0-100 / 本周额度剩余百分比")
+    runner.add_argument("--from-usage", dest="from_usage", metavar="FILE",
+                        help="read a captured /usage panel (scripts/claude-usage.sh) / 从抓取的 /usage 文本读取额度")
     runner.add_argument("--no-push", action="store_true")
+
+    quota = sub.add_parser("quota", help="record another subscription runner's quota, e.g. Gemini / 登记其他订阅执行者的额度")
+    quota.add_argument("--runner", required=True, help="runner name; tasks with a matching --via follow it / 执行者名称")
+    quota.add_argument("--state", choices=["ok", "running", "quota", "login", "unknown"], help="login = not signed in / 未登录")
+    quota.add_argument("--reset", help="next quota refresh / 下次额度刷新")
+    quota.add_argument("--weekly-reset", dest="weekly_reset", help="weekly limit reset / 每周额度重置")
+    quota.add_argument("--resume", help="when queued work should resume / 计划恢复时间")
+    quota.add_argument("--week-left", dest="week_left", type=float, help="weekly quota left, 0-100 / 本周额度剩余百分比")
+    quota.add_argument("--used", help="free text, e.g. '35%%' / 已用量")
+    quota.add_argument("--limit", help="free text, e.g. 'rolling 5h window' / 上限说明")
+    for flag in ("--model", "--plan", "--tool", "--note"):
+        quota.add_argument(flag)
+    quota.add_argument("--no-push", action="store_true")
 
     listing = sub.add_parser("list", help="show current status / 查看当前状态")
     listing.add_argument("--bot")
@@ -933,6 +1114,8 @@ def dispatch(args):
         cmd_rm(args)
     elif args.cmd == "claude":
         cmd_claude(args)
+    elif args.cmd == "quota":
+        cmd_quota(args)
     elif args.cmd == "list":
         cmd_list(args)
     elif args.cmd == "stats":

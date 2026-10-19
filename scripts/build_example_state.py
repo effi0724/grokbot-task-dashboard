@@ -196,6 +196,12 @@ def main():
             stage="排队等一个空闲窗口", eta_revisions=0,
             note="EXAMPLE · 人还在上一份材料上。",
         ),
+        "long-read": active(
+            "long-read", "[示例] 交给订阅执行者的长文摘要", "research", "running", 55, 60,
+            now + timedelta(minutes=30), now - timedelta(minutes=35), now - timedelta(minutes=5),
+            stage="第 2 部分", eta_revisions=0, via="Gemini",
+            note="EXAMPLE · 交给另一个订阅执行者，看板跟随它的额度。",
+        ),
     }
     (bots_dir / "Researcher.json").write_text(json.dumps(researcher, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
@@ -242,7 +248,26 @@ def main():
             "model": "example-model",
             "plan": "example",
             "note": "[示例] 额度窗口已用完，恢复后再继续排队任务。",
+            "session_left": 0.0,
+            "week_left": 58.0,
+            "weekly_reset": iso(now + timedelta(days=3, hours=2)),
+            "limit_scope": "session",
+            "usage_read": iso(now - timedelta(minutes=9)),
             "updated": iso(now - timedelta(minutes=9)),
+        },
+        "quotas": {
+            "Gemini": {
+                "state": "ok",
+                "week_left": 64.0,
+                "weekly_reset": iso(now + timedelta(days=5)),
+                "reset": iso(now + timedelta(hours=2)),
+                "used": "36%",
+                "limit": "100%",
+                "plan": "example",
+                "tool": "example CLI",
+                "note": "[示例] 另一个订阅执行者的额度。",
+                "updated": iso(now - timedelta(minutes=20)),
+            },
         },
     }
     (bots_dir / "Claude Code.json").write_text(json.dumps(runner, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

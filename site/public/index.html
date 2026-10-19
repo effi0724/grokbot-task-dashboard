@@ -25,6 +25,9 @@ button.lang:focus-visible{outline:2px solid var(--run);outline-offset:2px}
 .sum{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:3px 11px;font-size:13px}
 .chip b{font-weight:600}
+.chip{cursor:pointer;user-select:none}.chip.on{background:var(--fg);color:var(--bg);border-color:var(--fg)!important}.badge[data-f]{cursor:pointer}
+.qrow{display:flex;justify-content:space-between;font-size:13px;margin-top:10px}
+.kv .stale{color:var(--quota)}
 .grid,.claude,.acc-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 10px}
 .card.alert{border-color:var(--quota);box-shadow:0 0 0 1px var(--quota) inset}

@@ -74,3 +74,31 @@ These cards do not replace per-task updates. Set `--via` to the runner name (`--
 ## Routine tasks
 
 Register every recurring job once: `st set --bot NAME --task-id SHORT_ID --title "..." --stage "daily 08:00" --state routine --eta unknown`. Update or remove it when the schedule changes. A one-off scheduled job should be finished with `st done` right after it runs, not left as a routine.
+
+## Long-running watchers: start them with `stwatch`
+
+A watcher started with `cmd &` or `nohup` shares the agent shell's process group. When that shell is reaped (command timeout, session end, reboot) the whole group gets `SIGKILL` with no error, and the task freezes at its last progress. Start watchers through `stwatch` instead:
+
+```bash
+stwatch start --name SHORT_NAME --bot NAME --task-id TASK_ID [--cwd DIR] [--max-restarts 5] -- COMMAND ARGS...
+stwatch list                 # status, pid, restarts, heartbeat
+stwatch logs SHORT_NAME      # default log: $ST_ROOT/watchers/SHORT_NAME.log
+stwatch stop SHORT_NAME      # stop; `stwatch rm` also deletes the record
+stwatch watchdog             # one pass: revive dead supervisors, ensure the daemon
+```
+
+- The supervisor runs in its own session (setsid). A non-zero exit restarts the command with backoff (10 s, 20 s, 40 s … up to 5 min; `STWATCH_BACKOFF_SEC` sets the base), at most `--max-restarts` times. Exit 0 counts as finished. Once the task is closed with `st done` or `st rm`, the watcher stops within a minute (`--keep-after-done` turns that off).
+- Heartbeat: every 10 minutes (`STWATCH_BEAT_SEC`) it runs `st beat`, which records `heartbeat` and the watcher status without changing progress or `updated`. Your watcher still reports progress with `st set`.
+- Revival: `stwatch daemon` checks every 5 minutes (`STWATCH_DAEMON_SEC`); `stwatch watchdog` starts the daemon if it is gone. Call `scripts/stwatch-watchdog.sh` from whatever scheduler you have (cron, launchd, a routine agent) every 15–30 minutes as a second layer. If the supervisor died but the command is still running, the watchdog adopts it instead of starting a second copy.
+- Inside a watcher, never let a failing `st` call break the loop: `st set ... || true` in bash, and in Python wrap `subprocess.run([... "st" ...], timeout=60)` in try/except (including `TimeoutExpired`). Watchers get `ST_PUSH_RETRIES=3` so pushes retry with backoff.
+- Only supervise real work (OCR, backups) this way when rerunning it is safe.
+- `stwatch` is Linux-first: PID-reuse and reboot detection use `/proc`. On macOS it falls back to signal 0.
+
+## Stuck and lost tasks
+
+The page flags running tasks that went quiet. A signal is an `st` update or a watcher heartbeat.
+
+- **Maybe stuck**: 30 minutes without a heartbeat for a task with a watcher, 60 minutes without an update for one without, or an ETA more than 15 minutes past with no update since.
+- **Lost**: the watcher reported that it gave up (restarts used up), or 3 hours with no signal at all.
+
+The flags are clickable and filter the board.

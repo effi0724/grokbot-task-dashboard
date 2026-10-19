@@ -68,6 +68,10 @@ def active(task_id, title, task_type, state, pct, estimate, eta, started, update
         "eta_revisions": extra.get("eta_revisions", 0),
         "resume": iso(extra["resume"]) if extra.get("resume") else "",
     }
+    if extra.get("heartbeat"):
+        task["heartbeat"] = iso(extra["heartbeat"])
+    if extra.get("watcher"):
+        task["watcher"] = extra["watcher"]
     return task
 
 
@@ -165,6 +169,8 @@ def main():
             "parse-durations", "[示例] 实现工期解析", "coding", "running", 62, 120,
             now + timedelta(hours=2), now - timedelta(minutes=70), now - timedelta(minutes=4),
             stage="补相对时间与绝对时间", eta_revisions=1,
+            heartbeat=now - timedelta(minutes=2),
+            watcher={"name": "example-test-loop", "alive": True, "restarts": 1, "checked": iso(now - timedelta(minutes=2))},
             eta_first=now - timedelta(minutes=70) + timedelta(hours=3),
             note="EXAMPLE · 原始预估 2 小时，ETA 改过 1 次。",
         ),
@@ -181,9 +187,9 @@ def main():
     coordinator["tasks"] = {
         "route-morning": active(
             "route-morning", "[示例] 分发晨间摘要", "orchestration", "running", 40, 90,
-            now + timedelta(minutes=50), now - timedelta(minutes=40), now - timedelta(minutes=6),
+            now + timedelta(minutes=50), now - timedelta(minutes=110), now - timedelta(minutes=75),
             stage="等待 Researcher 回传要点", eta_revisions=1,
-            note="EXAMPLE · 还在等上游摘要。",
+            note="EXAMPLE · 75 分钟没有更新，看板标为可能卡住。",
         ),
     }
     (bots_dir / "Coordinator.json").write_text(json.dumps(coordinator, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

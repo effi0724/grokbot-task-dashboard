@@ -74,3 +74,31 @@ st estimate --bot Coder --task-type coding --estimate 2h
 ## 例行任务
 
 每个定期任务登记一次：`st set --bot 名称 --task-id 短id --title "..." --stage "每天 08:00" --state routine --eta 待估`。频率变了或删除时同步更新。只跑一次的定时任务跑完立刻 `st done`，不要一直留成例行任务。
+
+## 长时间盯任务的进程（watcher）一律用 `stwatch` 启动
+
+用 `cmd &` 或 `nohup` 起的 watcher 和 agent 的 shell 在同一个进程组。shell 被回收（命令超时、会话结束、重启）时整组会被 `SIGKILL`，不留任何报错，看板任务就停在旧进度。所以改用 `stwatch`：
+
+```bash
+stwatch start --name 英文短名 --bot 名称 --task-id 任务id [--cwd 目录] [--max-restarts 5] -- 命令 参数...
+stwatch list                 # 状态、PID、重启次数、心跳
+stwatch logs 英文短名        # 默认日志 $ST_ROOT/watchers/英文短名.log
+stwatch stop 英文短名        # 停止；`stwatch rm` 还会删除登记
+stwatch watchdog             # 巡检一次：守护进程没了就拉起，并确保常驻巡检在线
+```
+
+- 守护进程用 setsid 跑在独立会话里。命令退出码非 0 时退避重启（10 秒、20 秒、40 秒……最长 5 分钟；`STWATCH_BACKOFF_SEC` 设起始值），最多 `--max-restarts` 次。退出码 0 视为正常结束。任务被 `st done` 或 `st rm` 关掉后，1 分钟内自动停止（`--keep-after-done` 可关闭这一行为）。
+- 心跳：每 10 分钟（`STWATCH_BEAT_SEC`）运行一次 `st beat`，只记录 `heartbeat` 和 watcher 状态，不改进度，也不改 `updated`。watcher 自己照常用 `st set` 推进度。
+- 拉起：`stwatch daemon` 每 5 分钟巡检一次（`STWATCH_DAEMON_SEC`）；`stwatch watchdog` 发现常驻进程没了会拉起它。再用你手上的调度方式（cron、launchd、例行任务）每 15–30 分钟跑一次 `scripts/stwatch-watchdog.sh`，作为第二层。守护进程没了但命令还在跑时，巡检会接管它，不会再起一份。
+- watcher 里调用 `st` 不要让异常打断循环：bash 写 `st set ... || true`，Python 用 try/except 包住 `subprocess.run([... "st" ...], timeout=60)`（`TimeoutExpired` 也要接住）。watcher 会带上 `ST_PUSH_RETRIES=3`，推送失败会退避重试。
+- 真正干活的长任务（OCR、备份等）只有确认重跑安全时才这样托管。
+- `stwatch` 以 Linux 为主：防 PID 复用和识别重启靠 `/proc`。macOS 上退化为用信号 0 判断进程是否存活。
+
+## 可能卡住与失联
+
+看板会给太久没动静的进行中任务挂标签。动静指 `st` 更新或 watcher 心跳。
+
+- **可能卡住**：有 watcher 的任务 30 分钟没心跳；没有 watcher 的任务 60 分钟没更新；或者 ETA 过了 15 分钟还没有新进度。
+- **失联**：watcher 报告已放弃（重启次数用完），或者 3 小时毫无动静。
+
+标签可以点击，用来筛选看板。

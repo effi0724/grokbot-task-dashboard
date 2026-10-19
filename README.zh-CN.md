@@ -72,6 +72,8 @@ st claude --state quota --reset +5h --resume +5h30m --note "额度用完"
 st claude --session-left 40 --week-left 70 --weekly-reset "01-20 10:00"
 scripts/claude-usage.sh                              # 读 /usage，再 st claude --from-usage
 st quota --runner Gemini --state ok --week-left 64 --reset +3h
+st beat --bot Coder --task-id parse-durations --watcher tests  # 只记心跳
+stwatch start --name tests --bot Coder --task-id parse-durations -- ./watch-tests.sh
 st push
 st token-sha256                                      # 只打印哈希，用来填 Pages 机密
 ```
@@ -80,7 +82,7 @@ ETA 可以写成：`2026-10-18 03:30`、`03:30`（今天，若已过则是明天
 
 `ST_BOTS` 可以覆盖内置名单（`名字:简介`，用英文逗号分开）。没写进名单的机器人，一旦有了状态文件也会出现。状态：`running`、`waiting`、`queued`、`blocked`、`quota`、`routine`、`done`、`cancelled`。
 
-本地文件在 `$ST_ROOT`：`bots/<名字>.json`、`.token`、`.lock`、`.push_pending`。写入时会加文件锁。推送把一整份 JSON 快照 POST 到 `ST_PUSH_URL`，头是 `Authorization: Bearer`。没有地址或没有令牌文件时，本地记录仍然保存。
+本地文件在 `$ST_ROOT`：`bots/<名字>.json`、`.token`、`.lock`、`.push_pending`，以及 `stwatch` 用的 `watchers/`。推送失败会退避重试（`ST_PUSH_RETRIES` 为总尝试次数，默认 2；401/403 不重试）。写入时会加文件锁。推送把一整份 JSON 快照 POST 到 `ST_PUSH_URL`，头是 `Authorization: Bearer`。没有地址或没有令牌文件时，本地记录仍然保存。
 
 给代理的上报习惯：[docs/agent-reporting.zh-CN.md](docs/agent-reporting.zh-CN.md)（[English](docs/agent-reporting.md)）。
 
@@ -92,7 +94,7 @@ ETA 可以写成：`2026-10-18 03:30`、`03:30`（今天，若已过则是明天
 - `POST /api/push` 用 `env.TOKEN_SHA256` 核对 Bearer 令牌，把快照写进 D1（`env.DB`）。
 - `GET /api/state` 返回这份快照。页面每 60 秒拉一次。
 
-不连 Cloudflare 时，用任意静态服务器打开 `site/public/index.html` 并加上 `?example=1`，就会渲染 `example-state.json`。页头的按钮在中文和 English 之间切换。点状态标签或任务徽章可以筛选看板，筛选条件保存在网址里（`#f=状态`）。额度卡片显示 Claude Code 的 5 小时和每周额度条，以及每个 `st quota` 执行者各一张卡片；`--via` 写了执行者名称的任务会跟随它的额度（额度用完时进行中显示为额度用完，重置后额度用完显示为排队中）。
+不连 Cloudflare 时，用任意静态服务器打开 `site/public/index.html` 并加上 `?example=1`，就会渲染 `example-state.json`。页头的按钮在中文和 English 之间切换。太久没动静的进行中任务会挂上「可能卡住」或「失联」标签（规则见 [agent-reporting.zh-CN.md](docs/agent-reporting.zh-CN.md#可能卡住与失联)）；用 `stwatch` 托管的任务会显示 watcher 状态和心跳。点状态标签或任务徽章可以筛选看板，筛选条件保存在网址里（`#f=状态`）。额度卡片显示 Claude Code 的 5 小时和每周额度条，以及每个 `st quota` 执行者各一张卡片；`--via` 写了执行者名称的任务会跟随它的额度（额度用完时进行中显示为额度用完，重置后额度用完显示为排队中）。
 
 ![额度卡片](docs/screenshot-quota.png)
 

@@ -63,6 +63,7 @@ if (!accuracyText.includes("1.10×") || !accuracyText.includes("1.45×")) {
 }
 await page.screenshot({ path: join(docs, "screenshot-dashboard.png") });
 await page.locator("#accuracy").screenshot({ path: join(docs, "screenshot-accuracy.png") });
+await page.locator("#claude").screenshot({ path: join(docs, "screenshot-quota.png") });
 
 await page.evaluate(() => window.scrollTo(0, 0));
 await page.getByRole("button", { name: "EN" }).click();

@@ -12,6 +12,25 @@
   "model": "example-model",
   "plan": "example",
   "note": "[示例] 额度窗口已用完，恢复后再继续排队任务。",
+  "session_left": 0.0,
+  "week_left": 58.0,
+  "weekly_reset": "2026-01-18T16:00:00-05:00",
+  "limit_scope": "session",
+  "usage_read": "2026-01-15T13:51:00-05:00",
   "updated": "2026-01-15T13:51:00-05:00"
+ },
+ "quotas": {
+  "Gemini": {
+   "state": "ok",
+   "week_left": 64.0,
+   "weekly_reset": "2026-01-20T14:00:00-05:00",
+   "reset": "2026-01-15T16:00:00-05:00",
+   "used": "36%",
+   "limit": "100%",
+   "plan": "example",
+   "tool": "example CLI",
+   "note": "[示例] 另一个订阅执行者的额度。",
+   "updated": "2026-01-15T13:40:00-05:00"
+  }
  }
 }

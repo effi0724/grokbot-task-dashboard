@@ -77,6 +77,42 @@
    "updated": "2026-01-15T14:00:00-05:00",
    "tasks": [
     {
+     "id": "long-read",
+     "title": "[示例] 交给订阅执行者的长文摘要",
+     "task_type": "research",
+     "stage": "第 2 部分",
+     "pct": 55,
+     "eta": "2026-01-15T14:30:00-05:00",
+     "eta_first": "2026-01-15T14:30:00-05:00",
+     "estimate_minutes": 60,
+     "estimate_source": "flag",
+     "state": "running",
+     "note": "EXAMPLE · 交给另一个订阅执行者，看板跟随它的额度。",
+     "via": "Gemini",
+     "started": "2026-01-15T13:25:00-05:00",
+     "updated": "2026-01-15T13:55:00-05:00",
+     "eta_revisions": 0,
+     "resume": "",
+     "calibration": {
+      "raw_minutes": 60,
+      "minutes": 69,
+      "low_minutes": 61,
+      "high_minutes": 76,
+      "basis": "bot+type",
+      "n": 6,
+      "median_ratio": 1.15,
+      "p25_ratio": 1.025,
+      "p75_ratio": 1.275,
+      "spread": 0.25,
+      "overrun_rate": 0.667,
+      "low_confidence": false,
+      "bot": "Researcher",
+      "task_type": "research",
+      "applied_ratio": 1.15,
+      "reason": "ok"
+     }
+    },
+    {
      "id": "source-pass",
      "title": "[示例] 通读发布说明",
      "task_type": "research",
@@ -412,7 +448,26 @@
   "model": "example-model",
   "plan": "example",
   "note": "[示例] 额度窗口已用完，恢复后再继续排队任务。",
+  "session_left": 0.0,
+  "week_left": 58.0,
+  "weekly_reset": "2026-01-18T16:00:00-05:00",
+  "limit_scope": "session",
+  "usage_read": "2026-01-15T13:51:00-05:00",
   "updated": "2026-01-15T13:51:00-05:00"
+ },
+ "quotas": {
+  "Gemini": {
+   "state": "ok",
+   "week_left": 64.0,
+   "weekly_reset": "2026-01-20T14:00:00-05:00",
+   "reset": "2026-01-15T16:00:00-05:00",
+   "used": "36%",
+   "limit": "100%",
+   "plan": "example",
+   "tool": "example CLI",
+   "note": "[示例] 另一个订阅执行者的额度。",
+   "updated": "2026-01-15T13:40:00-05:00"
+  }
  },
  "claude_tasks": [],
  "accuracy": {

@@ -69,6 +69,9 @@ st stats
 st done --bot Coder --task-id parse-durations
 st rm --bot Coder --task-id parse-durations          # mistaken entry, not history
 st claude --state quota --reset +5h --resume +5h30m --note "额度用完"
+st claude --session-left 40 --week-left 70 --weekly-reset "01-20 10:00"
+scripts/claude-usage.sh                              # read /usage, then st claude --from-usage
+st quota --runner Gemini --state ok --week-left 64 --reset +3h
 st push
 st token-sha256                                      # hash only, for the Pages secret
 ```
@@ -89,7 +92,9 @@ Reporting habits for agents: [docs/agent-reporting.md](docs/agent-reporting.md)�
 - `POST /api/push` checks the bearer token against `env.TOKEN_SHA256` and stores the snapshot in D1 (`env.DB`).
 - `GET /api/state` returns that snapshot. The page polls it every 60 seconds.
 
-Open `site/public/index.html` through any static server with `?example=1` to render `example-state.json` without Cloudflare. The button in the header switches the UI between 中文 and English.
+Open `site/public/index.html` through any static server with `?example=1` to render `example-state.json` without Cloudflare. The button in the header switches the UI between 中文 and English. Click a state chip or badge to filter the board (the filter is kept in the URL as `#f=STATE`). Quota cards show Claude Code's 5-hour and weekly bars and one card per `st quota` runner; tasks whose `--via` names a runner follow its quota (running → quota while it is out, quota → queued after its reset).
+
+![Quota cards](docs/screenshot-quota.png)
 
 ## Deploy
 

@@ -58,4 +58,19 @@ Skip running commentary. The percent and the ETA carry the progress.
 
 ## Runner quota
 
-`st claude` records the separate Claude Code card (state `ok`, `running`, `quota`, or `unknown`). It does not replace per-task updates. A task handed to that runner should set `--via "Claude Code"` so the dashboard can group it.
+`st claude` records the Claude Code card: state (`ok`, `running`, `quota`, `unknown`), the 5-hour and weekly bars (`--session-left`, `--week-left`, 0–100), and their reset times (`--reset`, `--weekly-reset`). Prefer reading the real numbers over typing them: `scripts/claude-usage.sh` opens the `/usage` panel (no model request, no quota spent), saves the text, and runs `st claude --from-usage FILE`. Run it:
+
+1. before handing work to Claude Code;
+2. after it finishes a stretch of work;
+3. as soon as you see a usage or rate-limit message, instead of typing `st claude --state quota`;
+4. after a reset, before resuming.
+
+Do not poll it on a timer. Any bar at about 0 marks `quota` and sets the resume time to 30 minutes after that reset; a reading with room on both bars leaves `quota`. A manual `--state quota` without numbers empties the 5-hour bar so the card and bars agree. The card warns when the reading is more than 3 hours old.
+
+Other subscription runners (for example Gemini or Kimi) use `st quota --runner NAME` with `--state ok|running|quota|login|unknown`, `--week-left`, `--used`, `--limit`, `--reset`, `--weekly-reset`, `--resume`, `--model`, `--plan`, `--tool`, `--note`. Each gets its own card.
+
+These cards do not replace per-task updates. Set `--via` to the runner name (`--via "Claude Code"`, `--via Gemini`). The page then shows a running task as `quota` while its runner is out, and a `quota` task as `queued` once the runner's reset time has passed. Still record the real state with `st set ... --state running` when the work actually resumes.
+
+## Routine tasks
+
+Register every recurring job once: `st set --bot NAME --task-id SHORT_ID --title "..." --stage "daily 08:00" --state routine --eta unknown`. Update or remove it when the schedule changes. A one-off scheduled job should be finished with `st done` right after it runs, not left as a routine.

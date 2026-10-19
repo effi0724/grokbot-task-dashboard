@@ -72,6 +72,8 @@ st claude --state quota --reset +5h --resume +5h30m --note "额度用完"
 st claude --session-left 40 --week-left 70 --weekly-reset "01-20 10:00"
 scripts/claude-usage.sh                              # read /usage, then st claude --from-usage
 st quota --runner Gemini --state ok --week-left 64 --reset +3h
+st beat --bot Coder --task-id parse-durations --watcher tests  # heartbeat only
+stwatch start --name tests --bot Coder --task-id parse-durations -- ./watch-tests.sh
 st push
 st token-sha256                                      # hash only, for the Pages secret
 ```
@@ -80,7 +82,7 @@ ETA forms: `2026-10-18 03:30`, `03:30` (today, or tomorrow if that clock time ha
 
 `ST_BOTS` overrides the built-in roster (`Name:description` pairs, comma-separated). Bots that are not listed still show up once they have a state file. States: `running`, `waiting`, `queued`, `blocked`, `quota`, `routine`, `done`, `cancelled`.
 
-Local files live under `$ST_ROOT`: `bots/<name>.json`, `.token`, `.lock`, `.push_pending`. Writes take an exclusive file lock. The push posts one JSON snapshot to `ST_PUSH_URL` with `Authorization: Bearer`. If the URL or the token file is missing, the local write still stands.
+Local files live under `$ST_ROOT`: `bots/<name>.json`, `.token`, `.lock`, `.push_pending`, and `watchers/` for `stwatch`. A failed push is retried with backoff (`ST_PUSH_RETRIES` total attempts, default 2; 401/403 are not retried). Writes take an exclusive file lock. The push posts one JSON snapshot to `ST_PUSH_URL` with `Authorization: Bearer`. If the URL or the token file is missing, the local write still stands.
 
 Reporting habits for agents: [docs/agent-reporting.md](docs/agent-reporting.md)（[中文](docs/agent-reporting.zh-CN.md)）.
 
@@ -92,7 +94,7 @@ Reporting habits for agents: [docs/agent-reporting.md](docs/agent-reporting.md)�
 - `POST /api/push` checks the bearer token against `env.TOKEN_SHA256` and stores the snapshot in D1 (`env.DB`).
 - `GET /api/state` returns that snapshot. The page polls it every 60 seconds.
 
-Open `site/public/index.html` through any static server with `?example=1` to render `example-state.json` without Cloudflare. The button in the header switches the UI between 中文 and English. Click a state chip or badge to filter the board (the filter is kept in the URL as `#f=STATE`). Quota cards show Claude Code's 5-hour and weekly bars and one card per `st quota` runner; tasks whose `--via` names a runner follow its quota (running → quota while it is out, quota → queued after its reset).
+Open `site/public/index.html` through any static server with `?example=1` to render `example-state.json` without Cloudflare. The button in the header switches the UI between 中文 and English. Running tasks that go quiet get a "maybe stuck" or "lost" badge (see [agent-reporting.md](docs/agent-reporting.md#stuck-and-lost-tasks)); tasks run under `stwatch` show their watcher and heartbeat. Click a state chip or badge to filter the board (the filter is kept in the URL as `#f=STATE`). Quota cards show Claude Code's 5-hour and weekly bars and one card per `st quota` runner; tasks whose `--via` names a runner follow its quota (running → quota while it is out, quota → queued after its reset).
 
 ![Quota cards](docs/screenshot-quota.png)
 

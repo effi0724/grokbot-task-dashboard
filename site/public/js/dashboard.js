@@ -14,6 +14,8 @@ import {
   applyQuotaToTasks,
   quotaRunners,
   usageIsStale,
+  taskHealth,
+  formatSpan,
 } from "./format.js";
 
 const COLOR = {
@@ -47,6 +49,17 @@ function badge(state, strings) {
   return `<span class="badge ${cls}" data-f="${escapeHtml(state)}" title="${escapeHtml(strings.filterHint)}">${escapeHtml(label)}</span>`;
 }
 
+function matches(task, filter, nowMs) {
+  return filter === "stale" ? Boolean(taskHealth(task, nowMs)) : task.state === filter;
+}
+
+function healthBadge(health, strings, lang) {
+  const span = formatSpan(health.minutes, lang);
+  const text = strings.health[health.reason](span);
+  const tip = health.note ? `${text} · ${health.note}` : text;
+  return `<span class="badge s-${health.kind}" data-f="stale" title="${escapeHtml(tip)} · ${escapeHtml(strings.filterHint)}">${escapeHtml(text)}</span>`;
+}
+
 function taskCard(task, strings, lang, timeZone, nowMs) {
   const state = task.state || "running";
   const color = COLOR[state] || "var(--run)";
@@ -62,19 +75,22 @@ function taskCard(task, strings, lang, timeZone, nowMs) {
   } else if (state !== "routine") {
     eta = strings.etaUnknown;
   }
-  const stale = state === "running" && task.updated && (nowMs - new Date(task.updated).getTime()) > 2 * 3600e3;
+  const health = taskHealth(task, nowMs);
+  const stale = Boolean(health);
+  const watcher = task.watcher || null;
   const kind = task.task_type ? `<span class="via">${escapeHtml(task.task_type)}</span>` : "";
   const via = task.via ? `<span class="via">⇢ ${escapeHtml(task.via)}</span>` : "";
   const cal = calibrationLine(task.calibration, lang);
   return `<div class="task">
-    <div class="tt"><div class="title">${escapeHtml(task.title)}${kind}${via}</div>${badge(state, strings)}</div>
+    <div class="tt"><div class="title">${escapeHtml(task.title)}${kind}${via}</div><span class="badges">${health ? healthBadge(health, strings, lang) : ""}${badge(state, strings)}</span></div>
     ${task.stage ? `<div class="stage">${escapeHtml(task.stage)}</div>` : ""}
     ${showBar ? `<div class="bar"><i style="width:${Math.max(2, Math.min(100, Number(task.pct) || 0))}%;background:${color}"></i></div>` : ""}
     <div class="meta">
       ${showBar ? `<span>${Number(task.pct) || 0}%</span>` : ""}
       ${eta ? `<span>${eta}</span>` : ""}
       ${task.resume ? `<span>${strings.resume}${lang === "en" ? ": " : "："}${formatWhen(task.resume, lang, timeZone)}</span>` : ""}
-      <span class="${stale ? "stale" : ""}">${strings.updatedAt} ${formatAgo(task.updated, lang, nowMs)}${stale ? ` · ${strings.stale}` : ""}</span>
+      <span class="${stale ? "stale" : ""}">${strings.updatedAt} ${formatAgo(task.updated, lang, nowMs)}</span>
+      ${watcher ? `<span class="${watcher.alive === false ? "late" : ""}">${escapeHtml(strings.watcherLine(watcher.alive !== false, task.heartbeat ? formatAgo(task.heartbeat, lang, nowMs) : "", Number(watcher.restarts) || 0))}</span>` : ""}
     </div>
     ${cal ? `<div class="cal">${escapeHtml(cal)}</div>` : ""}
     ${task.auto === "paused" ? `<div class="note">${escapeHtml(strings.autoPaused(task.auto_runner))}</div>` : ""}
@@ -245,12 +261,15 @@ export function render(rawState, lang, options = {}) {
   if (bots) {
     bots.innerHTML = (state.bots || []).filter((bot) => {
       const all = bot.tasks || [];
-      all.forEach((task) => { counts[task.state] = (counts[task.state] || 0) + 1; });
+      all.forEach((task) => {
+        counts[task.state] = (counts[task.state] || 0) + 1;
+        if (taskHealth(task, nowMs)) counts.stale = (counts.stale || 0) + 1;
+      });
       if (!all.length) idle += 1;
       if (!filter) return true;
-      return filter === "idle" ? !all.length : all.some((task) => task.state === filter);
+      return filter === "idle" ? !all.length : all.some((task) => matches(task, filter, nowMs));
     }).map((bot) => {
-      const tasks = (bot.tasks || []).filter((task) => !filter || filter === "idle" || task.state === filter);
+      const tasks = (bot.tasks || []).filter((task) => !filter || filter === "idle" || matches(task, filter, nowMs));
       const active = tasks.filter((task) => task.state !== "routine");
       const cls = tasks.some((task) => task.state === "blocked")
         ? "bad"
@@ -274,7 +293,9 @@ export function render(rawState, lang, options = {}) {
     sum.innerHTML = `<span class="chip${on("")}" data-f="">${strings.all}</span>`
       + ORDER.filter((key) => counts[key] || filter === key).map((key) =>
         `<span class="chip${on(key)}" data-f="${key}" style="border-color:${COLOR[key]}">${strings.states[key]} <b>${counts[key] || 0}</b></span>`,
-      ).join("") + `<span class="chip${on("idle")}" data-f="idle">${strings.idleBots} <b>${idle}</b></span>`;
+      ).join("")
+      + (counts.stale || filter === "stale" ? `<span class="chip${on("stale")}" data-f="stale" style="border-color:var(--block)">${strings.staleChip} <b>${counts.stale || 0}</b></span>` : "")
+      + `<span class="chip${on("idle")}" data-f="idle">${strings.idleBots} <b>${idle}</b></span>`;
   }
   const accuracyTitle = document.getElementById("accuracy-title");
   const accuracyNote = document.getElementById("accuracy-note");

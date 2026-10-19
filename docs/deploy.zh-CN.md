@@ -125,6 +125,7 @@ export ST_STATS_DAYS="90"            # 可选，校准用的历史窗口
 export ST_HISTORY_DAYS="7"           # 可选，看板上「最近完成」的窗口
 export ST_STATS_MAX="500"            # 可选，参与校准的已完成任务上限
 export ST_CALIBRATE_MIN="3"          # 可选，样本数达到多少才给出校准后的 ETA
+export ST_PUSH_RETRIES="2"           # 可选，每次推送的尝试次数（stwatch 用 3）
 export ST_LANG="zh"                  # 或 en
 chmod +x cli/st
 export PATH="$PWD/cli:$PATH"

@@ -125,6 +125,7 @@ export ST_STATS_DAYS="90"            # optional, calibration window
 export ST_HISTORY_DAYS="7"           # optional, "recently finished" window
 export ST_STATS_MAX="500"            # optional, max finished tasks kept for calibration
 export ST_CALIBRATE_MIN="3"          # optional, samples needed before suggesting a calibrated ETA
+export ST_PUSH_RETRIES="2"           # optional, attempts per push (stwatch uses 3)
 export ST_LANG="zh"                  # or en
 chmod +x cli/st
 export PATH="$PWD/cli:$PATH"

@@ -197,3 +197,39 @@ export function applyQuotaToTasks(state, nowMs = Date.now()) {
 export function usageIsStale(iso, nowMs = Date.now(), hours = 3) {
   return Boolean(iso) && nowMs - new Date(iso).getTime() > hours * 3600e3;
 }
+
+// Stuck detection for running tasks. A signal is an `st` update or a watcher
+// heartbeat. With a watcher: 30 min of silence → stale; without: 60 min.
+// An ETA more than 15 min past with no update since → stale. A watcher that
+// reported itself lost, or 3 h of silence → lost.
+export const HEALTH_LIMITS = { staleWatcher: 30, staleTask: 60, lost: 180, etaGrace: 15 };
+
+export function taskHealth(task, nowMs = Date.now(), limits = HEALTH_LIMITS) {
+  if (!task || task.state !== "running") return null;
+  const watcher = task.watcher || null;
+  const signals = [task.updated, task.heartbeat].filter(Boolean).map((value) => new Date(value).getTime()).filter(Number.isFinite);
+  if (!signals.length) return null;
+  const silent = Math.max(0, Math.round((nowMs - Math.max(...signals)) / 60000));
+  if (watcher && watcher.alive === false) return { kind: "lost", reason: "watcher", minutes: silent, note: watcher.note || "" };
+  if (silent >= limits.lost) return { kind: "lost", reason: "silent", minutes: silent };
+  if (silent >= (watcher ? limits.staleWatcher : limits.staleTask)) {
+    return { kind: "stale", reason: watcher ? "heartbeat" : "update", minutes: silent };
+  }
+  if (task.eta) {
+    const eta = new Date(task.eta).getTime();
+    const updated = task.updated ? new Date(task.updated).getTime() : 0;
+    if (Number.isFinite(eta) && nowMs - eta > limits.etaGrace * 60000 && updated < eta) {
+      return { kind: "stale", reason: "eta", minutes: Math.round((nowMs - eta) / 60000) };
+    }
+  }
+  return null;
+}
+
+export function formatSpan(minutes, lang) {
+  const english = lang === "en";
+  if (minutes < 60) return english ? `${minutes} min` : `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (english) return rest ? `${hours} h ${rest} min` : `${hours} h`;
+  return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
+}

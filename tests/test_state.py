@@ -233,3 +233,43 @@ class AuditRegressionTests(StateCase):
     def test_wrangler_toml_has_no_build_output_dir(self):
         text = (ROOT / "site" / "wrangler.toml").read_text(encoding="utf-8")
         self.assertNotIn("\npages_build_output_dir", "\n" + text)
+
+
+class PushRetryTests(StateCase):
+    def test_push_retries_then_records_pending(self):
+        import urllib.error
+        os.environ["ST_PUSH_URL"] = "https://example.invalid/api/push"
+        os.environ["ST_PUSH_RETRIES"] = "3"
+        with open(stlib.token_path(), "w", encoding="utf-8") as handle:
+            handle.write("example-token")
+        calls, sleeps = [], []
+        original_open, original_sleep = stlib.urllib.request.urlopen, stlib._sleep
+
+        def failing(*args, **kwargs):
+            calls.append(1)
+            raise urllib.error.URLError("down")
+        stlib.urllib.request.urlopen = failing
+        stlib._sleep = sleeps.append
+        try:
+            with redirect_stderr(io.StringIO()):
+                self.assertFalse(stlib.push(quiet=True))
+        finally:
+            stlib.urllib.request.urlopen = original_open
+            stlib._sleep = original_sleep
+            os.environ.pop("ST_PUSH_RETRIES", None)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(sleeps, [2, 6])
+        self.assertTrue(os.path.exists(stlib.pending_path()))
+
+    def test_beat_keeps_updated_and_sets_watcher(self):
+        with redirect_stdout(io.StringIO()):
+            stlib.cmd_set(ns())
+            before = stlib.load("Coder")["tasks"]["site-tests"]["updated"]
+            self.advance(minutes=10)
+            stlib.cmd_beat(SimpleNamespace(bot="Coder", task_id="site-tests", watcher="w", alive="0",
+                                           restarts=2, wnote="gave up", quiet=False, no_push=True))
+        task = stlib.load("Coder")["tasks"]["site-tests"]
+        self.assertEqual(task["updated"], before)
+        self.assertNotEqual(task["heartbeat"], before)
+        self.assertEqual(task["watcher"], {"name": "w", "alive": False, "restarts": 2, "note": "gave up",
+                                           "checked": task["heartbeat"]})

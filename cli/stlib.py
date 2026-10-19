@@ -472,6 +472,16 @@ def snapshot():
     }
 
 
+def push_retries():
+    """ST_PUSH_RETRIES: total attempts per push (default 2). Watchers may raise it."""
+    return min(int_env("ST_PUSH_RETRIES", 2), 6)
+
+
+def _sleep(seconds):
+    import time
+    time.sleep(seconds)
+
+
 def push(quiet=False):
     url = push_url()
     if not url:
@@ -505,17 +515,26 @@ def push(quiet=False):
         "User-Agent": "grokbot-task-dashboard-st/1.0",
     })
     err = t("看板返回的状态码异常", "dashboard returned an unexpected status")
-    try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            ok = response.status == 200
-            if not ok:
-                err = f"HTTP {response.status}"
-    except urllib.error.HTTPError as exc:
-        ok = False
-        err = f"HTTP {exc.code}"
-    except Exception as exc:
-        ok = False
-        err = exc.__class__.__name__
+    ok = False
+    tries = push_retries()
+    for attempt in range(tries):
+        try:
+            with urllib.request.urlopen(req, timeout=10) as response:
+                ok = response.status == 200
+                if not ok:
+                    err = f"HTTP {response.status}"
+        except urllib.error.HTTPError as exc:
+            ok = False
+            err = f"HTTP {exc.code}"
+            if exc.code in (401, 403):
+                break  # a bad token will not fix itself
+        except Exception as exc:
+            ok = False
+            err = exc.__class__.__name__
+        if ok:
+            break
+        if attempt + 1 < tries:
+            _sleep(min(30, 2 * 3 ** attempt))
     if ok:
         pending = pending_path()
         if os.path.exists(pending):
@@ -885,6 +904,42 @@ def cmd_quota(args):
         push()
 
 
+def cmd_beat(args):
+    """Watcher heartbeat: touch heartbeat/watcher only, never `updated` or progress.
+
+    Exit code 3 when the task is no longer open, so a supervisor can stop.
+    """
+    bot = _clean_bot(args.bot)
+    task_id = _clean_task_id(args.task_id)
+    with Locked():
+        data = load(bot)
+        task = data["tasks"].get(task_id)
+        if task is None:
+            raise CliError(t(
+                f"st: [{bot}] 没有进行中的任务 {task_id}，心跳忽略",
+                f"st: [{bot}] no open task {task_id}; heartbeat ignored",
+            ), code=3)
+        stamp = iso(now())
+        task["heartbeat"] = stamp
+        watcher = dict(task.get("watcher") or {})
+        if args.watcher is not None:
+            watcher["name"] = _clip(args.watcher, 60)
+        if args.alive is not None:
+            watcher["alive"] = args.alive == "1"
+        if args.restarts is not None:
+            watcher["restarts"] = max(0, args.restarts)
+        if args.wnote is not None:
+            watcher["note"] = _clip(args.wnote, 300)
+        watcher["checked"] = stamp
+        task["watcher"] = watcher
+        save(data)
+    if not args.quiet:
+        lost = "" if watcher.get("alive", True) else t("（盯任务进程已失联）", " (watcher lost)")
+        print(t(f"st: [{bot}] {task['title']} 心跳 {fmt(stamp)}", f"st: [{bot}] {task['title']} heartbeat {fmt(stamp)}") + lost)
+    if not args.no_push:
+        push(quiet=args.quiet)
+
+
 def _print_accuracy(accuracy):
     global_row = accuracy.get("global")
     if not global_row:
@@ -1071,6 +1126,16 @@ def build_parser():
         quota.add_argument(flag)
     quota.add_argument("--no-push", action="store_true")
 
+    beat = sub.add_parser("beat", help="watcher heartbeat; does not change progress or updated / 盯任务进程心跳")
+    beat.add_argument("--bot", required=True)
+    beat.add_argument("--task-id", required=True)
+    beat.add_argument("--watcher", help="watcher name / 名称")
+    beat.add_argument("--alive", choices=["0", "1"], help="1 = running, 0 = lost / 在线或失联")
+    beat.add_argument("--restarts", type=int, help="automatic restarts so far / 已自动重启次数")
+    beat.add_argument("--wnote", help="watcher note / 备注")
+    beat.add_argument("--quiet", action="store_true")
+    beat.add_argument("--no-push", action="store_true")
+
     listing = sub.add_parser("list", help="show current status / 查看当前状态")
     listing.add_argument("--bot")
     listing.add_argument("--history", action="store_true")
@@ -1114,6 +1179,8 @@ def dispatch(args):
         cmd_rm(args)
     elif args.cmd == "claude":
         cmd_claude(args)
+    elif args.cmd == "beat":
+        cmd_beat(args)
     elif args.cmd == "quota":
         cmd_quota(args)
     elif args.cmd == "list":

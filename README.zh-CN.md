@@ -92,7 +92,7 @@ ETA 可以写成：`2026-10-18 03:30`、`03:30`（今天，若已过则是明天
 
 - `_middleware.js` 除了 `/api/push` 以外都要 Cloudflare Access 的 JWT。团队域名、受众和邮箱白名单来自 `env`（`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`、`ACCESS_ALLOWED_EMAILS`）。
 - `POST /api/push` 用 `env.TOKEN_SHA256` 核对 Bearer 令牌，把快照写进 D1（`env.DB`）。
-- `GET /api/state` 返回这份快照。页面每 60 秒拉一次。
+- `GET /api/state` 返回这份快照。页面每 5 分钟拉一次（标签页隐藏时暂停）；函数用 Cache API 缓存 60 秒。
 
 不连 Cloudflare 时，用任意静态服务器打开 `site/public/index.html` 并加上 `?example=1`，就会渲染 `example-state.json`。页头的按钮在中文和 English 之间切换。太久没动静的进行中任务会挂上「可能卡住」或「失联」标签（规则见 [agent-reporting.zh-CN.md](docs/agent-reporting.zh-CN.md#可能卡住与失联)）；用 `stwatch` 托管的任务会显示 watcher 状态和心跳。点状态标签或任务徽章可以筛选看板，筛选条件保存在网址里（`#f=状态`）。额度卡片显示 Claude Code 的 5 小时和每周额度条，以及每个 `st quota` 执行者各一张卡片；`--via` 写了执行者名称的任务会跟随它的额度（额度用完时进行中显示为额度用完，重置后额度用完显示为排队中）。
 

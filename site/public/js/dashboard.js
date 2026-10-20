@@ -367,7 +367,10 @@ export function boot() {
   const gen = document.getElementById("gen");
   if (gen && !last) gen.textContent = (STRINGS[lang] || STRINGS.zh).loading;
   load();
-  setInterval(load, 60000);
+  // Snapshots change every few minutes; poll every 5 min and skip hidden tabs to save D1 reads.
+  setInterval(() => {
+    if (!document.hidden) load();
+  }, 300000);
   setInterval(() => last && render(last, lang, { example, filter }), 20000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) load();

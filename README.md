@@ -92,7 +92,7 @@ Reporting habits for agents: [docs/agent-reporting.md](docs/agent-reporting.md)�
 
 - `_middleware.js` requires a Cloudflare Access JWT for every path except `/api/push`. Team domain, audience, and email allowlist come from `env` (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ACCESS_ALLOWED_EMAILS`).
 - `POST /api/push` checks the bearer token against `env.TOKEN_SHA256` and stores the snapshot in D1 (`env.DB`).
-- `GET /api/state` returns that snapshot. The page polls it every 60 seconds.
+- `GET /api/state` returns that snapshot. The page polls it every 5 minutes (paused while the tab is hidden); the function caches the response for 60 seconds with the Cache API.
 
 Open `site/public/index.html` through any static server with `?example=1` to render `example-state.json` without Cloudflare. The button in the header switches the UI between 中文 and English. Running tasks that go quiet get a "maybe stuck" or "lost" badge (see [agent-reporting.md](docs/agent-reporting.md#stuck-and-lost-tasks)); tasks run under `stwatch` show their watcher and heartbeat. Click a state chip or badge to filter the board (the filter is kept in the URL as `#f=STATE`). Quota cards show Claude Code's 5-hour and weekly bars and one card per `st quota` runner; tasks whose `--via` names a runner follow its quota (running → quota while it is out, quota → queued after its reset).
 

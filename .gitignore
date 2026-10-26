@@ -29,3 +29,9 @@ test-results/
 
 # Personal privacy scan terms (see .privacy-terms.example)
 .privacy-terms
+
+# stnudge hooks and stcount/stnudge local state
+.nudge-hooks.json
+**/.nudge-hooks.json
+.token-usage.json
+watchers/

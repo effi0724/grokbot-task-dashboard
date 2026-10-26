@@ -278,6 +278,22 @@ def main():
     }
     (bots_dir / "Claude Code.json").write_text(json.dumps(runner, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
+    def week_key(offset):
+        year, week, _ = (now - timedelta(weeks=offset)).isocalendar()
+        return f"{year}-W{week:02d}"
+
+    example_weeks = [
+        {"w": week_key(i), "in": 40000 * (4 - i), "out": 220000 * (4 - i), "cr": 9000000 * (4 - i), "cw": 300000 * (4 - i)}
+        for i in range(3)
+    ]
+    tokens = {"Claude Code": {
+        "total": {k: sum(w[k] for w in example_weeks) for k in ("in", "out", "cr", "cw")},
+        "weeks": example_weeks,
+        "since": iso(now - timedelta(weeks=2, days=3)),
+        "updated": iso(now - timedelta(minutes=12)),
+    }}
+    (bots_dir.parent / ".token-usage.json").write_text(json.dumps(tokens, indent=1) + "\n", encoding="utf-8")
+
     stlib.set_clock(lambda: now)
     snapshot = stlib.snapshot()
     stlib.set_clock(None)

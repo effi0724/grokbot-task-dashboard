@@ -99,7 +99,7 @@ Delivery has two paths. A bot listed in `$ST_ROOT/.nudge-hooks.json` (`{"BotName
 
 ```bash
 stnudge scan --dry-run          # show what would be sent
-stwatch start --name stnudge --bot Ops --task-id stnudge-svc -- cli/stnudge loop --every 600
+stwatch start --name stnudge --bot Ops --task-id demo-nudge -- cli/stnudge loop --every 600
 stnudge queue list              # JSON list of pending nudges
 stnudge queue ack <nudge_id>
 stnudge hooks                   # which bots have a hook (keys are never printed)

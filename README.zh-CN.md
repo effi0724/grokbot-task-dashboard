@@ -99,7 +99,7 @@ bot 经常忘了更新。`cli/stnudge` 扫描 `$ST_ROOT/bots/*.json`，发现任
 
 ```bash
 stnudge scan --dry-run          # 只看会发哪些
-stwatch start --name stnudge --bot Ops --task-id stnudge-svc -- cli/stnudge loop --every 600
+stwatch start --name stnudge --bot Ops --task-id demo-nudge -- cli/stnudge loop --every 600
 stnudge queue list              # 待转发提醒（JSON）
 stnudge queue ack <nudge_id>
 stnudge hooks                   # 哪些 bot 配了 hook（不打印密钥）

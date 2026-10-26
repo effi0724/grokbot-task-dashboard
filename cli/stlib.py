@@ -432,6 +432,16 @@ def _with_calibration(task, bot_name, accuracy):
     return view
 
 
+def token_usage():
+    """Token totals written by cli/stcount (keyed by runner name: total / weeks / since / updated)."""
+    try:
+        with open(os.path.join(root_dir(), ".token-usage.json"), encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def snapshot():
     desc, desc_zh = _descriptions()
     accuracy = current_accuracy()
@@ -468,6 +478,7 @@ def snapshot():
         "claude": runner.get("claude", {}),
         "quotas": runner.get("quotas", {}),
         "claude_tasks": runner_tasks,
+        "tokens": token_usage(),
         "accuracy": accuracy,
     }
 

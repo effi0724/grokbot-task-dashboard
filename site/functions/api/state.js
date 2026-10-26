@@ -8,6 +8,7 @@ const EMPTY = {
   bots: [],
   claude: {},
   claude_tasks: [],
+  tokens: {},
   generated_at: "",
   accuracy: null,
   _example: false,

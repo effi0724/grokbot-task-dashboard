@@ -273,3 +273,15 @@ class PushRetryTests(StateCase):
         self.assertNotEqual(task["heartbeat"], before)
         self.assertEqual(task["watcher"], {"name": "w", "alive": False, "restarts": 2, "note": "gave up",
                                            "checked": task["heartbeat"]})
+
+
+class TokenSnapshotTests(StateCase):
+    def test_snapshot_includes_token_usage(self):
+        import json as _json
+        path = os.path.join(self.tmp.name, ".token-usage.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            _json.dump({"Claude Code": {"total": {"in": 1, "out": 2, "cr": 3, "cw": 4}, "weeks": []}}, handle)
+        self.assertEqual(stlib.snapshot()["tokens"]["Claude Code"]["total"]["out"], 2)
+
+    def test_snapshot_tokens_default_empty(self):
+        self.assertEqual(stlib.snapshot()["tokens"], {})

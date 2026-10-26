@@ -16,6 +16,8 @@ import {
   usageIsStale,
   taskHealth,
   formatSpan,
+  formatTokens,
+  tokenSummary,
 } from "./format.js";
 
 const COLOR = {
@@ -145,7 +147,7 @@ function pctBar(label, value, suffix) {
     <div class="bar"><i style="width:${Math.max(2, pct)}%;background:${color}"></i></div>`;
 }
 
-function quotaCard(runner, strings, lang, timeZone, nowMs) {
+function quotaCard(runner, strings, lang, timeZone, nowMs, tokens) {
   const info = runner.info;
   const label = strings.claudeStates[info.state] || strings.claudeUnset;
   const badgeClass = info.state === "quota" ? "s-quota" : info.state === "running" ? "s-running" : info.state === "ok" ? "s-done" : "s-queued";
@@ -180,24 +182,30 @@ function quotaCard(runner, strings, lang, timeZone, nowMs) {
   return `<div class="card ${info.state === "quota" ? "alert" : ""}"><div class="ch"><h2>${escapeHtml(strings.quotaOf(runner.name))}</h2><span class="badge ${badgeClass}">${escapeHtml(label)}</span></div>
       ${bars}
       <div class="kv">${kv.map(([key, value]) => `<span>${escapeHtml(key)}</span><span>${escapeHtml(value)}</span>`).join("")}${readRow}</div>
-      ${note ? `<div class="note">${escapeHtml(note)}</div>` : ""}</div>`;
+      ${note ? `<div class="note">${escapeHtml(note)}</div>` : ""}
+      ${tokenBlock(tokens, strings, lang, timeZone, nowMs)}</div>`;
+}
+
+// Token usage footer for a quota card (data from cli/stcount via `st push`).
+export function tokenBlock(raw, strings, lang, timeZone, nowMs = Date.now()) {
+  const sum = tokenSummary(raw);
+  if (!sum) return `<div class="tok"><div class="note">${escapeHtml(strings.tokNone)}</div></div>`;
+  const sep = lang === "en" ? ": " : "：";
+  const total = `${strings.tokIO} <b>${formatTokens(sum.total.io)}</b> · ${strings.tokCR} ${formatTokens(sum.total.cr)} · ${strings.tokCW} ${formatTokens(sum.total.cw)}`;
+  const sinceText = sum.since ? formatWhen(sum.since, lang, timeZone) : "";
+  const updated = `${escapeHtml(formatAgo(sum.updated, lang, nowMs) || "—")}${sinceText ? ` · ${escapeHtml(strings.tokSince)}${sep}${escapeHtml(sinceText)}` : ""}`;
+  const rows = sum.weeks.map((row) => `<tr><td>${escapeHtml(row.week)}</td><td>${formatTokens(row.io)}</td><td>${formatTokens(row.cr)}</td><td>${formatTokens(row.cw)}</td></tr>`).join("");
+  const table = rows
+    ? `<details><summary>${escapeHtml(strings.tokWeeks)}</summary><div class="tbl-wrap"><table><thead><tr><th>${strings.tokWeek}</th><th>${strings.tokIO}</th><th>${strings.tokCR}</th><th>${strings.tokCW}</th></tr></thead><tbody>${rows}</tbody></table></div></details>`
+    : "";
+  return `<div class="tok"><div class="kv"><span>${escapeHtml(strings.tokTotal)}</span><span>${total}</span><span>${escapeHtml(strings.tokUpdated)}</span><span>${updated}</span></div>${table}</div>`;
 }
 
 function claudeBlock(state, strings, lang, timeZone, nowMs) {
-  const runners = quotaRunners(state, nowMs);
-  const handed = [];
-  (state.bots || []).forEach((bot) => {
-    (bot.tasks || []).forEach((task) => {
-      if (runners.some((runner) => runner.match.test(task.via || ""))) handed.push([bot.bot, task]);
-    });
-  });
-  (state.claude_tasks || []).forEach((task) => handed.push(["Claude Code", task]));
-  const handedHtml = handed.length
-    ? handed.map(([bot, task]) => `<div class="task"><div class="tt"><div class="title">${escapeHtml(task.title)}<span class="via">${escapeHtml(bot)}${task.via ? ` ⇢ ${escapeHtml(task.via)}` : ""}</span></div>${badge(task.state, strings)}</div>
-        <div class="meta">${task.eta ? `<span>${strings.eta} ${formatWhen(task.eta, lang, timeZone)}</span>` : ""}${task.resume ? `<span>${strings.start}${lang === "en" ? ": " : "："}${formatWhen(task.resume, lang, timeZone)}</span>` : ""}</div></div>`).join("")
-    : `<div class="empty">${strings.claudeEmpty}</div>`;
-  return runners.map((runner) => quotaCard(runner, strings, lang, timeZone, nowMs)).join("")
-    + `<div class="card"><div class="ch"><h2>${strings.claudeTasks}</h2></div>${handedHtml}</div>`;
+  const tokens = state.tokens || {};
+  return quotaRunners(state, nowMs)
+    .map((runner) => quotaCard(runner, strings, lang, timeZone, nowMs, tokens[runner.name]))
+    .join("");
 }
 
 function historyBlock(state, strings, lang, timeZone) {
@@ -374,4 +382,4 @@ export function boot() {
   });
 }
 
-boot();
+if (typeof document !== "undefined" && typeof location !== "undefined") boot();

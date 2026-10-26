@@ -86,6 +86,33 @@ ETA 可以写成：`2026-10-18 03:30`、`03:30`（今天，若已过则是明天
 
 给代理的上报习惯：[docs/agent-reporting.zh-CN.md](docs/agent-reporting.zh-CN.md)（[English](docs/agent-reporting.md)）。
 
+## 主动提醒：让看板提醒 bot
+
+bot 经常忘了更新。`cli/stnudge` 扫描 `$ST_ROOT/bots/*.json`，发现任务疑似停滞就提醒对应的 bot：
+
+- 状态是 `running`、`blocked`，或 `waiting` 且已过恢复时间，并且超过 `STNUDGE_TTL_MIN` 分钟（默认 90）没更新，或超过 ETA 30 分钟且 ETA 之后没再更新。`waiting` 任务从恢复时间起再给一个完整 TTL。
+- 原因：`stale_ttl`、`eta_overdue`、`blocked_stale`（PR 相关原因留给以后的版本）。
+- 频率限制：同一任务 6 小时最多一次、累计最多 2 次，之后一直封顶，直到 bot 更新任务才重新计数；全局每小时 `STNUDGE_GLOBAL_HOUR` 次（默认 10）。从不跟随重定向（避免泄露 key）；hook 地址不是 https 也不是 localhost 时会记警告。
+- 消息内容固定，不含任务文字：`{v, nudge_id, bot, task_id, reason, sent_at}`。
+
+送达有两种方式。在 `$ST_ROOT/.nudge-hooks.json`（`{"Bot名": {"url": "...", "key": "..."}}`，权限 600，不要提交）里配置了的 bot 会收到带 `Authorization: Bearer <key>` 的 HTTP POST，返回 401/403/404 或重定向会把这个 hook 标记为失效，修好后用 `stnudge hooks --reset <bot>` 清除。其他 bot 的提醒写进 `watchers/.nudge-queue.json`，由一个协调 bot 的例行任务（比如每 30 分钟）读取 `stnudge queue list`、逐条转发给对应的 bot，再执行 `stnudge queue ack <nudge_id>`。提醒之后任务已经更新的条目不再列出；已确认的条目和超过 7 天未确认的条目会被清理。路径可用 `STNUDGE_BASE`、`STNUDGE_BOTS`、`STNUDGE_HOOKS`、`STNUDGE_WATCHERS`、`STNUDGE_QUEUE` 覆盖。
+
+```bash
+stnudge scan --dry-run          # 只看会发哪些
+stwatch start --name stnudge --bot Ops --task-id stnudge-svc -- cli/stnudge loop --every 600
+stnudge queue list              # 待转发提醒（JSON）
+stnudge queue ack <nudge_id>
+stnudge hooks                   # 哪些 bot 配了 hook（不打印密钥）
+```
+
+## Token 用量
+
+`cli/stcount` 按 ISO 周（以 `ST_TZ` 划分）统计各执行者消耗的 token，`st push` 时作为快照里的 `tokens` 一起推送。每张额度卡片底部显示该执行者的累计值（输入+输出、缓存读、缓存写）和最近 6 周。只读本地日志，不发模型请求。
+
+- Claude Code：`stcount scan` 增量读取 `~/.claude/projects/**/*.jsonl`（可用 `STCOUNT_CLAUDE_GLOB` 改），每条回复只算一次。常驻运行：`stwatch start --name stcount --bot Ops --task-id stcount-svc -- cli/stcount loop --every 1800`。
+- Codex CLI：在运行 Codex 的机器上执行 `python3 scripts/codex-tokens.py`，它从 `~/.codex/sessions` 算出每周用量，把输出交给看板主机上的 `cli/stcount ingest-codex -`。重复推送不会重复计数。合并方式是按周取最大值，所以只能从一台 Codex 主机推送，两台不会相加。`st quota` 的执行者名字取 `Codex`，数字才会显示在它的卡片上。
+- 周累计存在 `$ST_ROOT/watchers/.token-weeks.json`，CLI 清理旧日志后历史也不会丢。
+
 ## 看板
 
 `site/public` 是静态页。`site/functions` 是 Pages 侧：

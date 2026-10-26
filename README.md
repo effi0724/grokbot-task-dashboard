@@ -86,6 +86,33 @@ Local files live under `$ST_ROOT`: `bots/<name>.json`, `.token`, `.lock`, `.push
 
 Reporting habits for agents: [docs/agent-reporting.md](docs/agent-reporting.md)（[中文](docs/agent-reporting.zh-CN.md)）.
 
+## Nudges: let the dashboard remind bots
+
+Agents forget to update. `cli/stnudge` scans `$ST_ROOT/bots/*.json` and nudges the owning bot when a task looks stale:
+
+- `running`, `blocked`, or `waiting` past its resume time, and not updated for `STNUDGE_TTL_MIN` minutes (default 90), or more than 30 minutes past an ETA it has not updated since. A `waiting` task gets a full TTL after its resume time.
+- Reasons: `stale_ttl`, `eta_overdue`, `blocked_stale` (the PR reasons are reserved for a later version).
+- Rate limits: at most once per task every 6 hours and 2 nudges per task in total; after that the task stays capped until the bot updates it, which resets the counters. `STNUDGE_GLOBAL_HOUR` per hour overall (default 10). Redirects are never followed (the key would leak); a non-https hook URL other than localhost logs a warning.
+- Payload is fixed and carries no task text: `{v, nudge_id, bot, task_id, reason, sent_at}`.
+
+Delivery has two paths. A bot listed in `$ST_ROOT/.nudge-hooks.json` (`{"BotName": {"url": "...", "key": "..."}}`, mode 600, never committed) gets an HTTP POST with `Authorization: Bearer <key>`; 401/403/404 or a redirect marks the hook broken; `stnudge hooks --reset <bot>` clears it after you fix the hook. Every other bot's nudge goes to `watchers/.nudge-queue.json`. A coordinator bot runs a routine (for example every 30 minutes) that reads `stnudge queue list`, forwards each entry to its bot, and then calls `stnudge queue ack <nudge_id>`. Entries whose task was updated after the nudge are hidden; acked entries, and unacked ones older than 7 days, are pruned. Paths can be overridden with `STNUDGE_BASE`, `STNUDGE_BOTS`, `STNUDGE_HOOKS`, `STNUDGE_WATCHERS`, `STNUDGE_QUEUE`.
+
+```bash
+stnudge scan --dry-run          # show what would be sent
+stwatch start --name stnudge --bot Ops --task-id demo-nudge -- cli/stnudge loop --every 600
+stnudge queue list              # JSON list of pending nudges
+stnudge queue ack <nudge_id>
+stnudge hooks                   # which bots have a hook (keys are never printed)
+```
+
+## Token usage
+
+`cli/stcount` counts the tokens your runners used, per ISO week (week boundaries in `ST_TZ`), and `st push` sends them as `tokens` in the snapshot. Each quota card shows the runner's totals (in+out, cache read, cache write) and the last 6 weeks at the bottom. Only local logs are read; no model requests are made.
+
+- Claude Code: `stcount scan` reads `~/.claude/projects/**/*.jsonl` incrementally (`STCOUNT_CLAUDE_GLOB` to override) and counts each reply once. Run `stwatch start --name stcount --bot Ops --task-id stcount-svc -- cli/stcount loop --every 1800`.
+- Codex CLI: on the machine where Codex runs, `python3 scripts/codex-tokens.py` prints weekly totals from `~/.codex/sessions`; pipe it into `cli/stcount ingest-codex -` on the dashboard host. Repeated pushes never double count. Totals are merged by per-week max, so push from one Codex host only; two hosts would not add up. Name the `st quota` runner `Codex` so the totals land on its card.
+- Weekly totals are kept in `$ST_ROOT/watchers/.token-weeks.json`, so history survives the CLIs' log cleanup.
+
 ## Dashboard
 
 `site/public` is the static page. `site/functions` is the Pages side:

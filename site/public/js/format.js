@@ -233,3 +233,26 @@ export function formatSpan(minutes, lang) {
   if (english) return rest ? `${hours} h ${rest} min` : `${hours} h`;
   return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
 }
+
+// Compact token counts: 1234 -> 1.2K, 3456789 -> 3.5M, 2e9 -> 2.00B.
+export function formatTokens(value) {
+  const n = Number(value) || 0;
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return String(Math.max(0, Math.round(n)));
+}
+
+// Token usage written by cli/stcount, reduced to what the quota card shows:
+// totals plus the most recent weeks (newest first). Returns null when absent.
+export function tokenSummary(raw, weeks = 6) {
+  if (!raw || typeof raw !== "object" || !raw.total) return null;
+  const io = (row) => (Number(row.in) || 0) + (Number(row.out) || 0);
+  const pick = (row) => ({ io: io(row), cr: Number(row.cr) || 0, cw: Number(row.cw) || 0 });
+  const rows = (Array.isArray(raw.weeks) ? raw.weeks : [])
+    .filter((row) => row && typeof row.w === "string")
+    .sort((a, b) => b.w.localeCompare(a.w))
+    .slice(0, weeks)
+    .map((row) => ({ week: row.w, ...pick(row) }));
+  return { total: pick(raw.total), weeks: rows, since: raw.since || "", updated: raw.updated || "" };
+}

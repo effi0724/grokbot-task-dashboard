@@ -1,10 +1,10 @@
 // Every request except the push endpoint needs a Cloudflare Access JWT.
-// /api/push authenticates itself with the bearer token in push.js.
+// /api/push and /api/server-push authenticate themselves with bearer tokens.
 import { verifyAccess } from "../lib/auth.js";
 
 export async function onRequest(ctx) {
   const url = new URL(ctx.request.url);
-  if (url.pathname === "/api/push") return ctx.next();
+  if (url.pathname === "/api/push" || url.pathname === "/api/server-push") return ctx.next();
   let why;
   try {
     why = await verifyAccess(ctx.request, ctx.env || {});

@@ -154,3 +154,9 @@ Config that identifies an account (Pages project, D1 id, Access audience, team d
 ## License
 
 [MIT](LICENSE). Copyright (c) 2026 GrokBot Task Dashboard contributors.
+
+## Multi-bot operations (Chinese docs)
+
+- [docs/multi-bot-operations.zh-CN.md](docs/multi-bot-operations.zh-CN.md): router bot, a dedicated ops bot that maintains this dashboard/repo, and a review-only bot for multi-model cross-review.
+- [docs/cloudflare.zh-CN.md](docs/cloudflare.zh-CN.md): Pages + Functions + D1, push-based server metrics (`/api/server-push`, `server/grokbot-report.sh`), Zero Trust tunnel + service tokens.
+- [docs/bootstrap-your-grokbot.zh-CN.md](docs/bootstrap-your-grokbot.zh-CN.md): a prompt to rebuild a similar setup with your own Grok Bot.

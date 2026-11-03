@@ -46,6 +46,13 @@
 
 ![窄屏示例看板](docs/screenshot-mobile.png)
 
+
+## 多 bot 协作、运维 bot 与 Cloudflare
+
+- [多 bot 协作与调度](docs/multi-bot-operations.zh-CN.md)：Steward 总调度、专职 bot、**独立的运维 bot**（维护看板和本仓库、巡检、提醒、备份、监控）、审核官多模型交叉审核。
+- [Cloudflare 用法](docs/cloudflare.zh-CN.md)：Pages + Functions + D1、服务器每 5 分钟推送指标（只写令牌、只存哈希、保留 7 天）、Zero Trust Tunnel + 服务令牌。
+- [让你自己的 Grok Bot 搭一套](docs/bootstrap-your-grokbot.zh-CN.md)：可以直接发给 Grok Bot 的提示词。
+
 ## 命令行
 
 ```bash
